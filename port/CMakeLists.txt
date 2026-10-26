@@ -89,7 +89,7 @@ set(NG_INCLUDES ${PORT}/compat ${PORT}/sdl2 ${PORT}/gen ${RLX}/include ${SRC} ${
 set(NG_LIBS SDL2::SDL2 ZLIB::ZLIB PNG::PNG Vorbis::vorbisfile Vorbis::vorbis Ogg::ogg ${NG_MIXER})
 
 if(NG_GLES)
-    list(APPEND PLATFORM_SOURCES ${PORT}/gles/glcompat.cpp)
+    list(APPEND PLATFORM_SOURCES ${PORT}/gles/ng_gles.cpp)
     list(APPEND NG_DEFS NG_GLES)
     list(APPEND NG_INCLUDES ${PORT}/gles)
 endif()

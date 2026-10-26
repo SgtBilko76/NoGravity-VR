@@ -57,6 +57,9 @@ Prepared for public release: 02/24/2004 - Stephane Denis, realtech VR
 #define GL_TEXTURE_RECTANGLE_ARB 0x84F5
 #endif
 
+#elif (defined __LINUX__) && defined(NG_GLES)
+#include "ng_gles.h"
+
 #elif (defined __LINUX__)
 #define GL_GLEXT_PROTOTYPES
 #include <GL/gl.h>

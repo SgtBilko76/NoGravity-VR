@@ -44,7 +44,7 @@ def edit_all(rel, old, new):
 # ------------------------------------------------------------------ video (OpenGL client)
 GL = "rlx32/src/renderers/opengl/linux/sdl_gl.cpp"
 edit(GL, "#include <SDL/SDL.h>\n#include <GL/gl.h>\n",
-     "#include <SDL/SDL.h>\n#ifdef NG_GLES\n#include \"glcompat.h\"\n#else\n#include <GL/gl.h>\n#endif\n")
+     "#include <SDL/SDL.h>\n#ifdef NG_GLES\n#include \"ng_gles.h\"\n#else\n#include <GL/gl.h>\n#endif\n")
 edit(GL, "static SDL_Surface *g_pSurface = NULL;\n",
      "#ifdef NG_SDL2\n#include \"ng_sdl2.h\"\nstatic void *g_pSurface = NULL;\n#else\nstatic SDL_Surface *g_pSurface = NULL;\n#endif\n")
 edit(GL, "    glFinish();\n    SDL_GL_SwapBuffers();\n",
@@ -166,5 +166,9 @@ edit(LS, "#include \"sysini.h\"\n", "#include \"sysini.h\"\n#ifdef NG_SDL2\n#inc
 # FLI animated textures keep the in-memory buffer pointer in a u_int32_t (start_buf).
 edit("rlx32/include/gx_flc.h", "    u_int32_t       start_buf;\n", "#ifdef NG_SDL2\n    uintptr_t       start_buf;\n#else\n    u_int32_t       start_buf;\n#endif\n")
 edit("rlx32/src/gx_flc.c", "        pAnim->start_buf = (u_int32_t)pAnim->fileBuffer;\n", "        pAnim->start_buf = (uintptr_t)pAnim->fileBuffer;\n")
+
+# GLES renderer path (Quest): ng_gles.h emulates the GL 1.x slice the renderer uses.
+edit("rlx32/src/renderers/opengl/gl_v3x.h", "#elif (defined __LINUX__)\n#define GL_GLEXT_PROTOTYPES\n#include <GL/gl.h>\n#include <GL/glext.h>\n",
+     "#elif (defined __LINUX__) && defined(NG_GLES)\n#include \"ng_gles.h\"\n\n#elif (defined __LINUX__)\n#define GL_GLEXT_PROTOTYPES\n#include <GL/gl.h>\n#include <GL/glext.h>\n")
 
 print("changed:", sorted(set(changed)) or "nothing (already applied)")

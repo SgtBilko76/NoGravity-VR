@@ -28,7 +28,7 @@ Linux/SDL Port: 2005 - Matt Williams
 #include <stdlib.h>
 #include <SDL/SDL.h>
 #ifdef NG_GLES
-#include "glcompat.h"
+#include "ng_gles.h"
 #else
 #include <GL/gl.h>
 #endif
