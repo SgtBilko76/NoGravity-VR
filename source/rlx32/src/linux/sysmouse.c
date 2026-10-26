@@ -30,6 +30,9 @@ Linux/SDL Port: 2005 - Matt Williams
 #include "_rlx32.h"
 #include "_rlx.h"
 #include "sysctrl.h"
+#ifdef NG_SDL2
+#include "ng_sdl2.h"
+#endif
 
 static int MouseOpen(void *hnd)
 {
@@ -65,7 +68,11 @@ static void MouseHide()
 static void MouseSetPosition(u_int32_t x, u_int32_t y)
 {
   // Just call through into SDL.
+#ifdef NG_SDL2
+  NG_WarpMouse((int)x, (int)y);
+#else
   SDL_WarpMouse((Uint16)x, (Uint16)y);
+#endif
 }
 
 static unsigned long MouseUpdate(void *dev)
@@ -76,7 +83,15 @@ static unsigned long MouseUpdate(void *dev)
   memcpy(sMOU->steButtons, sMOU->rgbButtons, sMOU->numButtons);
 
   // Get the button state and mouse movement.
+#ifdef NG_SDL2
+  {
+    int rx, ry;
+    buttons = (Uint8)SDL_GetRelativeMouseState(&rx, &ry);
+    sMOU->lX = rx; sMOU->lY = ry;
+  }
+#else
   buttons = SDL_GetRelativeMouseState(&sMOU->lX, &sMOU->lY);
+#endif
 
   // For each button, record its new state.
   sMOU->rgbButtons[0] = (u_int8_t)((buttons & SDL_BUTTON(SDL_BUTTON_LEFT)) ? 1 : 0);
@@ -84,11 +99,20 @@ static unsigned long MouseUpdate(void *dev)
   sMOU->rgbButtons[2] = (u_int8_t)((buttons & SDL_BUTTON(SDL_BUTTON_RIGHT)) ? 1 : 0);
 
   // SDL treats the Z axis (mouse wheel) as buttons, rather than an axis.
+#ifdef NG_SDL2
+  sMOU->lZ = NG_TakeWheel();
+  {
+    int ax, ay;
+    NG_GetMouseState(&ax, &ay);
+    sMOU->x = ax; sMOU->y = ay;
+  }
+#else
   sMOU->lZ = ((buttons & SDL_BUTTON(SDL_BUTTON_WHEELUP)) ? 1 : 0) -
              ((buttons & SDL_BUTTON(SDL_BUTTON_WHEELDOWN)) ? 1 : 0);
 
   // Get the absolute mouse position.
   (void)SDL_GetMouseState(&sMOU->x, &sMOU->y);
+#endif
 
   return TRUE;
 }

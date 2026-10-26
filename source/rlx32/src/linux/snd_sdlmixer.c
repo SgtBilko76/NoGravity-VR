@@ -154,7 +154,14 @@ static int Detect(void)
 
 {
 
+#ifdef NG_SDL2
+  {
+    const char *drv = SDL_GetCurrentAudioDriver();
+    snprintf(V3XA.Client->s_DrvName, 64, "%s", drv ? drv : "SDL2");
+  }
+#else
   SDL_AudioDriverName(V3XA.Client->s_DrvName, 64);
+#endif
 
   return 0;
 

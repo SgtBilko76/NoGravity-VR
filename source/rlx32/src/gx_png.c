@@ -30,7 +30,9 @@ Prepared for public release: 02/24/2004 - Stephane Denis, realtech VR
 #include <zlib.h>
 #define _ZLIB_H
 #include <png.h>
+#ifndef NG_SDL2
 #include <pngstruct.h>
+#endif
 
 #include "_rlx32.h"
 #include "systools.h"
@@ -51,7 +53,7 @@ pngx_readm_pData(png_structp png_ptr, png_bytep data, png_size_t length)
 	* instead of an int, which is what fread() actually returns.
 	*/
 	check = (png_size_t)FIO_cur->fread(data, (png_size_t)1, length,
-	  (SYS_FILEHANDLE)png_ptr->io_ptr);
+	  (SYS_FILEHANDLE)png_get_io_ptr(png_ptr));
 
 	if (check != length)
 	{
@@ -123,7 +125,7 @@ if (!pClut)
 	png_read_info(png_ptr, info_ptr);  /* read all PNG info up to image data */
 
 	/*
-	if (setjmp(png_ptr->jmpbuf))
+	if (setjmp(png_jmpbuf(png_ptr)))
 	{
 		png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
 		return NULL;

@@ -121,7 +121,11 @@ void timer_Start(SYS_TIMER *tm, int iFreq, int iMinFrame)
 int32_t thread_begin(SYS_THREAD *pThread, enum SYS_THREAD_PRIORITY_ENUM priority)
 {
   pThread->nStatus = 0;
+#ifdef NG_SDL2
+  pThread->hThread = (void *)SDL_CreateThread((int(*)(void *))pThread->pFunc, "rlx", pThread->pArgument);
+#else
   pThread->hThread = (void *)SDL_CreateThread((int(*)(void *))pThread->pFunc, pThread->pArgument);
+#endif
   if (pThread->hThread != NULL)
   {
     pThread->nStatus = 1;

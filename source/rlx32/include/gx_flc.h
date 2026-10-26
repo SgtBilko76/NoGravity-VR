@@ -83,7 +83,11 @@ typedef struct _fli_struct {
 
     GXSPRITE      bitmap;
     u_int32_t       start;
+#ifdef NG_SDL2
+    uintptr_t       start_buf;
+#else
     u_int32_t       start_buf;
+#endif
     u_int32_t       LastTime;
     u_int16_t      CurrentFrame;
     u_int16_t      MaximumFrame;

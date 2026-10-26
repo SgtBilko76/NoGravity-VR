@@ -110,7 +110,12 @@ __end_extern_c
  
 #define sysMemSet memset
 #define sysMemCpy memcpy
+#ifdef NG_SDL2
+static __inline char *ng_strcpy_safe(char *d, const char *s) { size_t n = strlen(s) + 1; memmove(d, s, n); return d; }
+#define sysStrCpy ng_strcpy_safe
+#else
 #define sysStrCpy strcpy
+#endif
 #define sysStrnCpy strncpy
 #define sysStrLen strlen
 #define sysMemZero(a, b) sysMemSet(a, 0, b)

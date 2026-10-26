@@ -37,8 +37,14 @@ int STUB_TaskControl(void)
   return FALSE;
 }
 
+#ifdef NG_SDL2
+#include "ng_sdl2.h"
+#endif
 int main(int argc, char *argv[])
 {
+#ifdef NG_SDL2
+  NG_Startup(argc, argv);
+#endif
   // TODO: Set up current directory.
 
   // When we finish, call SDL_Quit to make sure we're all tidied up.

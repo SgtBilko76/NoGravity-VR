@@ -27,7 +27,11 @@ Linux/SDL Port: 2005 - Matt Williams
 #include <stdio.h>
 #include <stdlib.h>
 #include <SDL/SDL.h>
+#ifdef NG_GLES
+#include "glcompat.h"
+#else
 #include <GL/gl.h>
+#endif
 
 #include "_rlx32.h"
 #include "_rlx.h"
@@ -48,14 +52,23 @@ struct RLXSYSTEM *g_pRLX;
 int GL_IsSupported(const char *extension);
 
 // GL Driver Specific
+#ifdef NG_SDL2
+#include "ng_sdl2.h"
+static void *g_pSurface = NULL;
+#else
 static SDL_Surface *g_pSurface = NULL;
+#endif
 static GXDISPLAYMODEINFO *g_pDisplays = NULL;
 static int g_Mode = -1;
 
 static void RLXAPI Flip(void)
 {
+#ifdef NG_SDL2
+    NG_SwapWindow();
+#else
     glFinish();
     SDL_GL_SwapBuffers();
+#endif
     return;
 }
 
@@ -79,7 +92,9 @@ static GXDISPLAYMODEINFO RLXAPI *EnumDisplayList(int bpp)
     &hardcoded_mode_800_by_600,
     NULL
   };
+#ifndef NG_SDL2
   const SDL_VideoInfo *vid_info;
+#endif
   SDL_PixelFormat fmts[3];
   int num_fmts;
   int fmt_idx;
@@ -88,7 +103,15 @@ static GXDISPLAYMODEINFO RLXAPI *EnumDisplayList(int bpp)
   GXDISPLAYMODEINFO *displays;
   int display_idx = 0;
 
+#ifdef NG_SDL2
   if (g_pDisplays == NULL)
+  {
+    g_pDisplays = NG_ListModes(g_pRLX);
+  }
+  if (0)
+#else
+  if (g_pDisplays == NULL)
+#endif
   {
     memset(&fmts, 0, sizeof(SDL_PixelFormat));
 
@@ -96,8 +119,10 @@ static GXDISPLAYMODEINFO RLXAPI *EnumDisplayList(int bpp)
     if (g_pRLX->Video.Config & RLXVIDEO_Windowed)
     {
       num_fmts = 1;
+#ifndef NG_SDL2
       vid_info = SDL_GetVideoInfo();
       memcpy(&fmts[0], vid_info->vfmt, sizeof(SDL_PixelFormat));
+#endif
     }
     // Alternatively, in full-screen mode, allow any pixel format.
     else
@@ -113,7 +138,11 @@ static GXDISPLAYMODEINFO RLXAPI *EnumDisplayList(int bpp)
   
     for (fmt_idx = 0; fmt_idx < num_fmts; fmt_idx ++)
     {
+#ifdef NG_SDL2
+      modes = NULL;
+#else
       modes = SDL_ListModes(&fmts[fmt_idx], SDL_OPENGL | ((g_pRLX->Video.Config & RLXVIDEO_Windowed) ? 0 : SDL_FULLSCREEN));
+#endif
 
       if (modes == (SDL_Rect **)-1)
       {
@@ -135,7 +164,11 @@ static GXDISPLAYMODEINFO RLXAPI *EnumDisplayList(int bpp)
 
     for (fmt_idx = 0; fmt_idx < num_fmts; fmt_idx ++)
     {
+#ifdef NG_SDL2
+      modes = NULL;
+#else
       modes = SDL_ListModes(&fmts[fmt_idx], SDL_OPENGL | ((g_pRLX->Video.Config & RLXVIDEO_Windowed) ? 0 : SDL_FULLSCREEN));
+#endif
 
       if (modes == (SDL_Rect **)-1)
       {
@@ -289,6 +322,14 @@ static GXDISPLAYMODEHANDLE RLXAPI SearchDisplayMode(int lx, int ly, int bpp)
 
 static int RLXAPI CreateSurface(int BackBufferCount)
 {
+#ifdef NG_SDL2
+	int multisampling = FALSE;
+	SYS_ASSERT(g_pDisplays != NULL);
+	SYS_ASSERT(g_Mode != -1);
+	g_pSurface = NG_CreateWindow(g_pDisplays[g_Mode].lWidth, g_pDisplays[g_Mode].lHeight,
+		!(g_pRLX->Video.Config & RLXVIDEO_Windowed),
+		(g_pRLX->pGX->View.Flags & GX_CAPS_MULTISAMPLING) ? g_pRLX->pGX->View.Multisampling : 0);
+#else
 	int sdl_flags = SDL_OPENGL | ((g_pRLX->Video.Config & RLXVIDEO_Windowed) ? 0 : SDL_FULLSCREEN);
 	int multisampling = FALSE;
 
@@ -315,6 +356,7 @@ static int RLXAPI CreateSurface(int BackBufferCount)
 	  SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 0);
 	  g_pSurface = SDL_SetVideoMode(g_pDisplays[g_Mode].lWidth, g_pDisplays[g_Mode].lHeight, g_pDisplays[g_Mode].BitsPerPixel, sdl_flags);
 	}
+#endif
 	
 	if (g_pSurface == NULL)
 	{
@@ -331,10 +373,12 @@ static int RLXAPI CreateSurface(int BackBufferCount)
 	SYS_Debug("...%s\n", glGetString(GL_RENDERER));
 #endif
 
+#ifndef NG_GLES
 	if (multisampling)
 	{
 	  glEnable(GL_MULTISAMPLE_ARB);
 	}
+#endif
 
 	g_pRLX->pGX->Surfaces.maxSurface = BackBufferCount;
 
@@ -343,7 +387,11 @@ static int RLXAPI CreateSurface(int BackBufferCount)
 
 static void RLXAPI ReleaseSurfaces(void)
 {
+#ifdef NG_SDL2
+  NG_DestroyWindow();
+#else
   SDL_FreeSurface(g_pSurface);
+#endif
   g_pRLX->pGX->Surfaces.maxSurface = 0;
   g_pSurface = NULL;
   return;

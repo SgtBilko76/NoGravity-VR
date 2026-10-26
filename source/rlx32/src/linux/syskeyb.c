@@ -30,6 +30,9 @@ Linux/SDL Port: 2005 - Matt Williams
 #include "_rlx32.h"
 #include "_rlx.h"
 #include "sysctrl.h"
+#ifdef NG_SDL2
+#include "ng_sdl2.h"
+#endif
 
 static int KeyboardOpen(void *hnd)
 {
@@ -154,6 +157,30 @@ static unsigned long KeyboardUpdate(void *dev)
   // For each event we receive...
   while (SDL_PollEvent(&evt) != 0)
   {
+#ifdef NG_SDL2
+    if (NG_HandleEvent(&evt))
+      continue;
+    if ((evt.type == SDL_KEYDOWN) || (evt.type == SDL_KEYUP))
+    {
+      int sc = NG_MapKey(evt.key.keysym.sym);
+      if (sc == 0)
+        continue;
+      if (evt.type == SDL_KEYDOWN)
+      {
+        SKEY_SET_BIT(keys, sc, 1);
+        sKEY->scanCode = sc;
+        if ((evt.key.keysym.sym >= 32) && (evt.key.keysym.sym < 127))
+          sKEY->charCode = (char)evt.key.keysym.sym;
+      }
+      else
+      {
+        SKEY_SET_BIT(keys, sc, 0);
+        sKEY->scanCode = 0;
+        sKEY->charCode = 0;
+      }
+    }
+    continue;
+#endif
     // If it's a key-related event and the key is valid...
     if (((evt.type == SDL_KEYDOWN) ||
          (evt.type == SDL_KEYUP)) &&

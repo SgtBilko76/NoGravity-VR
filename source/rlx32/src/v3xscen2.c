@@ -1031,6 +1031,54 @@ static void RLXAPI *v3x_read_alloc(int32_t sz, int32_t n, int32_t n2, SYS_FILEHA
 	SYS_ASSERT(n == s);
     return tmp;
 }
+#ifdef NG_SDL2
+/* NoGravity 64-bit port: the data files hold 32-bit struct images (4-byte pointers). */
+#include "ng_conv32.h"
+static void RLXAPI *v3x_read_alloc32(const NG_LAYOUT32 *L, int32_t n, int32_t n2, SYS_FILEHANDLE in)
+{
+    u_int8_t *tmp, *out;
+    int s;
+    if (n2<n) n2 = n;
+    if (!(L->size64 * n2)) return NULL;
+    out = (u_int8_t*)MM_heap.malloc(L->size64 * n2);
+    sysMemZero(out, L->size64 * n2);
+    if (!n) return out;
+    tmp = (u_int8_t*)MM_std.malloc(L->size32 * n);
+    s = FIO_gzip.fread(tmp, L->size32, n, in);
+    SYS_ASSERT(n == s);
+    NG_Convert32(L, out, tmp, n, L->size32);
+    MM_std.free(tmp);
+    return out;
+}
+static void ng_fread32(void *dst, const NG_LAYOUT32 *L, SYS_FILEHANDLE in)
+{
+    u_int8_t tmp[1024];
+    SYS_ASSERT(L->size32 <= sizeof(tmp));
+    FIO_gzip.fread(tmp, 1, L->size32, in);
+    sysMemZero(dst, L->size64);
+    NG_Convert32(L, dst, tmp, 1, L->size32);
+}
+/* light/camera records are stored as a V3XNODE-sized (32-bit) block */
+static void RLXAPI *v3x_read_node32(const NG_LAYOUT32 *L, SYS_FILEHANDLE in)
+{
+    u_int8_t tmp[1024];
+    size_t sz = L->size64 > sizeof(V3XNODE) ? L->size64 : sizeof(V3XNODE);
+    u_int8_t *out = (u_int8_t*)MM_heap.malloc(sz);
+    sysMemZero(out, sz);
+    FIO_gzip.fread(tmp, 1, ng_l32_V3XNODE.size32, in);
+    NG_Convert32(L, out, tmp, 1, ng_l32_V3XNODE.size32);
+    return out;
+}
+#define V3X_READ_ALLOC(T, n, n2, in) v3x_read_alloc32(&ng_l32_##T, n, n2, in)
+#define V3X_FREAD1(dst, T, in) ng_fread32(dst, &ng_l32_##T, in)
+#define V3X_READ_NODE(T, in) v3x_read_node32(&ng_l32_##T, in)
+#define V3X_SIZE32(T) (ng_l32_##T.size32)
+#else
+#define V3X_READ_ALLOC(T, n, n2, in) v3x_read_alloc(sizeof(T), n, n2, in)
+#define V3X_FREAD1(dst, T, in) FIO_gzip.fread(dst, 1, sizeof(T), in)
+#define V3X_READ_NODE(T, in) v3x_read_alloc(sizeof(V3XNODE), 1, -1, in)
+#define V3X_SIZE32(T) sizeof(T)
+#endif
 /*------------------------------------------------------------------------
 *
 * PROTOTYPE  :  V3XMATERIAL *V3XMaterials_GetFp(SYS_FILEHANDLE in, int mt)
@@ -1050,7 +1098,7 @@ V3XMATERIAL *V3XMaterials_GetFp(SYS_FILEHANDLE in, int numMaterial)
 {
     V3XMATERIAL *Mat;
 	SYS_ASSERT(numMaterial < 255);
-	Mat = (V3XMATERIAL*)v3x_read_alloc(sizeof(V3XMATERIAL), numMaterial, -1, in);
+	Mat = (V3XMATERIAL*)V3X_READ_ALLOC(V3XMATERIAL, numMaterial, -1, in);
 
 #ifdef __BIG_ENDIAN__
 	{
@@ -1104,7 +1152,7 @@ static void V3XRGB_ConvertToMono(V3XSCALAR *mono, rgb32_t *rgb, unsigned n)
 V3XNODE static RLXAPI *v3x_VMX_unpack_node(SYS_FILEHANDLE in)
 {
     V3XMESH *obj;
-    obj =(V3XMESH*)v3x_read_alloc(sizeof(V3XMESH), 1, -1, in);
+    obj =(V3XMESH*)V3X_READ_ALLOC(V3XMESH, 1, -1, in);
 #ifdef __BIG_ENDIAN__
     BSWAP32((u_int32_t*)&obj->matrix, 12);
 	BSWAP32((u_int32_t*)&obj->Tk, 3+3+1);
@@ -1118,7 +1166,7 @@ static V3XMESH RLXAPI *v3x_VMX_unpack_object(SYS_FILEHANDLE in)
     V3XMESH *obj;
     int i;
     V3XPOLY *f;
-    obj =(V3XMESH*)v3x_read_alloc(sizeof(V3XMESH), 1, -1, in);
+    obj =(V3XMESH*)V3X_READ_ALLOC(V3XMESH, 1, -1, in);
 #ifdef __BIG_ENDIAN__
     BSWAP16((u_int16_t*)&obj->numVerts, 4);
     BSWAP32((u_int32_t *)&obj->flags, 1);
@@ -1132,7 +1180,7 @@ static V3XMESH RLXAPI *v3x_VMX_unpack_object(SYS_FILEHANDLE in)
 #ifdef __BIG_ENDIAN__        
         BSWAP32((u_int32_t*)obj->vertex , obj->numVerts*3);
 #endif
-        obj->face = (V3XPOLY*) v3x_read_alloc(sizeof(V3XPOLY) , obj->numFaces, -1, in);
+        obj->face = (V3XPOLY*) V3X_READ_ALLOC(V3XPOLY, obj->numFaces, -1, in);
         if (obj->uv)
         {
             obj->uv =(V3XUV*) v3x_read_alloc(sizeof(V3XUV), obj->numVerts, -1, in);
@@ -1233,7 +1281,7 @@ static V3XMESH RLXAPI *v3x_VMX_unpack_object(SYS_FILEHANDLE in)
 V3XLIGHT static RLXAPI *v3x_VMX_unpack_light(SYS_FILEHANDLE in)
 {
     V3XLIGHT *light;
-    light = (V3XLIGHT*)v3x_read_alloc(sizeof(V3XNODE), 1, -1, in);
+    light = (V3XLIGHT*)V3X_READ_NODE(V3XLIGHT, in);
 #ifdef __BIG_ENDIAN__
     BSWAP32((u_int32_t*)&light->pos, 16);
 #endif
@@ -1259,7 +1307,7 @@ V3XLIGHT static RLXAPI *v3x_VMX_unpack_light(SYS_FILEHANDLE in)
 V3XCAMERA static RLXAPI *v3x_VMX_unpack_camera(SYS_FILEHANDLE in)
 {
     V3XCAMERA *camera;
-    camera = (V3XCAMERA*)v3x_read_alloc(sizeof(V3XNODE), 1, -1, in);
+    camera = (V3XCAMERA*)V3X_READ_NODE(V3XCAMERA, in);
 #ifdef __BIG_ENDIAN__
     BSWAP32((u_int32_t*)&camera->M, 16);
 #endif
@@ -1274,12 +1322,15 @@ V3XCAMERA static RLXAPI *v3x_VMX_unpack_camera(SYS_FILEHANDLE in)
 */
 V3XCL static RLXAPI *v3x_VMX_unpack_collide(SYS_FILEHANDLE in)
 {
-    V3XCL *Cs = (V3XCL*) v3x_read_alloc(sizeof(V3XCL), 1, -1, in);
+    V3XCL *Cs = (V3XCL*) V3X_READ_ALLOC(V3XCL, 1, -1, in);
 #ifdef __BIG_ENDIAN__
     BSWAP32((u_int32_t*)Cs, 2);
 #endif
-	SYS_ASSERT(sizeof(V3XCL_ITEM) == 64);
-    Cs->item = (V3XCL_ITEM*)v3x_read_alloc(sizeof(V3XCL_ITEM), Cs->numItem, -1, in);
+	SYS_ASSERT(V3X_SIZE32(V3XCL_ITEM) == 64);
+    Cs->item = (V3XCL_ITEM*)V3X_READ_ALLOC(V3XCL_ITEM, Cs->numItem, -1, in);
+#ifdef NG_SDL2
+    { int ci; for (ci = 0; ci < Cs->numItem; ci++) if (Cs->item[ci].type == V3XCTYPE_MESH) SYS_Debug("[NG] WARNING: collision mesh item in data (32-bit pointers not converted)\n"); }
+#endif
 #ifdef __BIG_ENDIAN__
     BSWAP32((u_int32_t*)&Cs->global, 9);
     {
@@ -1310,7 +1361,7 @@ V3XTWEEN static RLXAPI *v3x_VMX_unpack_morph3D(SYS_FILEHANDLE in)
 {
     unsigned int i;
     V3XTWEEN *Mo;
-    Mo = (V3XTWEEN*)v3x_read_alloc(sizeof(V3XTWEEN), 1, -1, in);
+    Mo = (V3XTWEEN*)V3X_READ_ALLOC(V3XTWEEN, 1, -1, in);
 #ifdef __BIG_ENDIAN__
     BSWAP32((u_int32_t*)&Mo->numFrames, 3);
 #endif
@@ -1394,7 +1445,7 @@ static void RLXAPI v3x_VMX_unpack_TRI(V3XTRI *TRI, SYS_FILEHANDLE in)
     {
         if (TRI->flags&V3XKF_KEYEX)
         {
-            TRI->keyEx=(V3XKEYEX*)v3x_read_alloc(sizeof(V3XKEYEX), TRI->numKeys, -1, in);
+            TRI->keyEx=(V3XKEYEX*)V3X_READ_ALLOC(V3XKEYEX, TRI->numKeys, -1, in);
 #ifdef __BIG_ENDIAN__
             {
                 int i;
@@ -1409,7 +1460,7 @@ static void RLXAPI v3x_VMX_unpack_TRI(V3XTRI *TRI, SYS_FILEHANDLE in)
         }
         else
         {
-            TRI->keys=(V3XKEY*)v3x_read_alloc(sizeof(V3XKEY), TRI->numFrames, -1, in);
+            TRI->keys=(V3XKEY*)V3X_READ_ALLOC(V3XKEY, TRI->numFrames, -1, in);
 #ifdef __BIG_ENDIAN__
             BSWAP32((u_int32_t*)TRI->keys, TRI->numFrames*7);
 #endif
@@ -1427,11 +1478,16 @@ static void RLXAPI v3x_VMX_unpack_TRI(V3XTRI *TRI, SYS_FILEHANDLE in)
 
 static void v3xORI_Convert97(V3XSCENE *pScene, SYS_FILEHANDLE in)
 {
-    V3XORI97	*ori97A = (V3XORI97*)MM_std.malloc(pScene->numORI*sizeof(V3XORI97));
+    V3XORI97	*ori97A;
     V3XORI97	*ori97;
     V3XORI		*ori;
     int i;
+#ifdef NG_SDL2
+    ori97A = (V3XORI97*)V3X_READ_ALLOC(V3XORI97, pScene->numORI, -1, in);
+#else
+    ori97A = (V3XORI97*)MM_std.malloc(pScene->numORI*sizeof(V3XORI97));
     FIO_gzip.fread(ori97A, pScene->numORI, sizeof(V3XORI97), in);
+#endif
     pScene->ORI = MM_CALLOC(pScene->numORI, V3XORI);
     for (ori97 = ori97A, ori = pScene->ORI, i=0;i<pScene->numORI;i++, ori97++, ori++)
     {
@@ -1454,7 +1510,9 @@ static void v3xORI_Convert97(V3XSCENE *pScene, SYS_FILEHANDLE in)
         ori->pad2[0]  = ori97->matrix_Method;
         ori->index_color = ori97->index_Color;
     }
+#ifndef NG_SDL2
     MM_std.free(ori97A);
+#endif
     return;
 }
 /*------------------------------------------------------------------------
@@ -1466,11 +1524,16 @@ static void v3xORI_Convert97(V3XSCENE *pScene, SYS_FILEHANDLE in)
 */
 static void v3xOVI_Convert97(V3XSCENE *pScene, SYS_FILEHANDLE in)
 {
-    V3XOVI97 *ovi97A = (V3XOVI97*)MM_std.malloc(pScene->numOVI*sizeof(V3XOVI97));
+    V3XOVI97 *ovi97A;
     V3XOVI97  *ovi97;
     V3XOVI *ovi;
     int i;
+#ifdef NG_SDL2
+    ovi97A = (V3XOVI97*)V3X_READ_ALLOC(V3XOVI97, pScene->numOVI, -1, in);
+#else
+    ovi97A = (V3XOVI97*)MM_std.malloc(pScene->numOVI*sizeof(V3XOVI97));
     FIO_gzip.fread(ovi97A, pScene->numOVI, sizeof(V3XOVI97), in);
+#endif
     pScene->OVI = MM_CALLOC(pScene->numOVI, V3XOVI);
     
 	for (ovi97 = ovi97A, ovi = pScene->OVI, i = 0; i < pScene->numOVI; i++, ovi97++, ovi++)
@@ -1500,7 +1563,9 @@ static void v3xOVI_Convert97(V3XSCENE *pScene, SYS_FILEHANDLE in)
             ovi->index_PARENT = V3XScene_OVI_GetByName(pScene, pScene->ORI[j].name) - pScene->OVI;
         }
     }
+#ifndef NG_SDL2
     MM_std.free(ovi97A);
+#endif
     return;
 }
 
@@ -1514,7 +1579,7 @@ static void ReadSceneNodes(V3XSCENE *pScene, SYS_FILEHANDLE in, int bFormat97)
     if (bFormat97)
 		v3xORI_Convert97(pScene, in);
     else
-		pScene->ORI = (V3XORI*)v3x_read_alloc(sizeof(V3XORI), pScene->numORI, V3X.Setup.MaxExtentableObjet, in);
+		pScene->ORI = (V3XORI*)V3X_READ_ALLOC(V3XORI, pScene->numORI, V3X.Setup.MaxExtentableObjet, in);
     for (i=0;i<V3X.Setup.MaxExtentableObjet;i++)
     {
         if (pScene->ORI[i].type == 0) 
@@ -1523,9 +1588,9 @@ static void ReadSceneNodes(V3XSCENE *pScene, SYS_FILEHANDLE in, int bFormat97)
     if (bFormat97)
 		v3xOVI_Convert97(pScene, in);
     else
-		pScene->OVI = (V3XOVI*) v3x_read_alloc(sizeof(V3XOVI), pScene->numOVI, V3X.Setup.MaxExtentableObjet, in);
-    pScene->TRI = (V3XTRI*) v3x_read_alloc(sizeof(V3XTRI), pScene->numTRI, V3X.Setup.MaxExtentableObjet, in);
-    pScene->TVI = (V3XTVI*) v3x_read_alloc(sizeof(V3XTVI), pScene->numTVI, V3X.Setup.MaxExtentableObjet, in);
+		pScene->OVI = (V3XOVI*) V3X_READ_ALLOC(V3XOVI, pScene->numOVI, V3X.Setup.MaxExtentableObjet, in);
+    pScene->TRI = (V3XTRI*) V3X_READ_ALLOC(V3XTRI, pScene->numTRI, V3X.Setup.MaxExtentableObjet, in);
+    pScene->TVI = (V3XTVI*) V3X_READ_ALLOC(V3XTVI, pScene->numTVI, V3X.Setup.MaxExtentableObjet, in);
     if (bFormat97)
     {
         V3XTVI *TVI = pScene->TVI;
@@ -1564,9 +1629,18 @@ _RLXEXPORTFUNC V3XSCENE RLXAPI *V3XScene_GetFromFile_VMX(const char *filename)
     V3XLAYER97 *bk;
     V3XLAYER *layer = &pScene->Layer;
     V3X.Setup.flags|=V3XOPTION_97;
+#ifdef NG_SDL2
+#undef HEAD1
+#define HEAD1 (ng_l32_V3XSCENE.size32 - ng_l32_V3XLAYER.size32)
+    sysMemZero(pScene, sizeof(V3XSCENE));
+#endif
     temp = (u_int8_t*) MM_std.malloc(HEAD1 + sizeof(V3XLAYER97));
     FIO_gzip.fread(temp, HEAD1 + sizeof(V3XLAYER97), 1, in);
+#ifdef NG_SDL2
+    NG_Convert32(&ng_l32_V3XSCENE, pScene, temp, 1, HEAD1);
+#else
     sysMemCpy(pScene, temp, HEAD1);
+#endif
 #ifdef __BIG_ENDIAN__
 	BSWAP16(&pScene->numOVI, 4);
 #endif
@@ -1735,7 +1809,7 @@ V3XOVI RLXAPI *V3XOVI_GetFromFile(V3XSCENE *pScene, const char *filename, int do
             V3XORI *ORI = OVI->ORI;
             int k;
             j++;
-            FIO_gzip.fread(ORI, 1, sizeof(V3XORI), in);
+            V3X_FREAD1(ORI, V3XORI, in);
             v3x_VMX_unpack_ORI(ORI, in, 0);
             *OVI->node =* ORI->node;
             k = (flags>>8);
@@ -1782,7 +1856,7 @@ V3XTVI RLXAPI *V3XTVI_GetFromFile(V3XSCENE *pScene, const char *filename)
 #ifdef __BIG_ENDIAN__
         BSWAP32(&flags, 1);
 #endif
-        FIO_gzip.fread(TRI, 1, sizeof(V3XTRI), in);
+        V3X_FREAD1(TRI, V3XTRI, in);
         v3x_VMX_unpack_TRI(TRI, in);
     }while((flags&4)==0);
     return master;
@@ -1812,7 +1886,7 @@ V3XTRI RLXAPI *V3XTRI_GetFromFile(V3XSCENE *pScene, char *filename)
 #ifdef __BIG_ENDIAN__
         BSWAP32(&flags, 1);
 #endif
-        FIO_gzip.fread(TRI, 1, sizeof(V3XTRI), in);
+        V3X_FREAD1(TRI, V3XTRI, in);
         v3x_VMX_unpack_TRI(TRI, in);
     }while((flags&4)==0);
     return master;

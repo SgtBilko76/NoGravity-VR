@@ -1,0 +1,14 @@
+{
+  "dependencies": [
+    {
+      "name": "sdl2",
+      "default-features": false
+    },
+    "libpng",
+    "libvorbis",
+    {
+      "name": "sdl2-mixer",
+      "default-features": false
+    }
+  ]
+}

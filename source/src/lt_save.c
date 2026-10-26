@@ -34,6 +34,9 @@ Prepared for public release: 02/24/2004 - Stephane Denis, realtech VR
 #include "sysresmx.h"
 #include "systools.h"
 #include "sysini.h"
+#ifdef NG_SDL2
+#include "ng_conv32.h"
+#endif
 #include "sysctrl.h"
 #include "sysnetw.h"
 #include "gx_tools.h"
@@ -434,7 +437,16 @@ int NG_ReplayLoad(void)
 	SYS_ASSERT(in);
 
 	sysConPrint("Load replay game %s", tex);
+#ifdef NG_SDL2
+    {
+        u_int8_t tmp32[sizeof(SGRecordReplay)];
+        pIO->fread(tmp32, ng_l32_SGRecordReplay.size32, 1, in);
+        sysMemZero(&g_pRecordData, sizeof(SGRecordReplay));
+        NG_Convert32(&ng_l32_SGRecordReplay, &g_pRecordData, tmp32, 1, ng_l32_SGRecordReplay.size32);
+    }
+#else
     pIO->fread(&g_pRecordData, sizeof(SGRecordReplay), 1, in);
+#endif
 
 #ifdef __BIG_ENDIAN__
 	BSWAP16((u_int16_t*)&g_pRecordData.startlevel, 2);
@@ -452,7 +464,16 @@ int NG_ReplayLoad(void)
     {
         unsigned k;
         g_pRecordData.rec = (SGRecordBuffer*)MM_std.malloc(sizeof(SGRecordBuffer)*g_pRecordData.step);
+#ifdef NG_SDL2
+        {
+            u_int8_t *tmp32 = (u_int8_t*)MM_std.malloc(ng_l32_SGRecordBuffer.size32 * g_pRecordData.step);
+            pIO->fread(tmp32, ng_l32_SGRecordBuffer.size32, g_pRecordData.step, in);
+            NG_Convert32(&ng_l32_SGRecordBuffer, g_pRecordData.rec, tmp32, g_pRecordData.step, ng_l32_SGRecordBuffer.size32);
+            MM_std.free(tmp32);
+        }
+#else
         pIO->fread(g_pRecordData.rec, sizeof(SGRecordBuffer), g_pRecordData.step, in);
+#endif
         for (k=0;k<g_pRecordData.step;k++)
         {
             SGRecordBuffer *rec = g_pRecordData.rec + k;

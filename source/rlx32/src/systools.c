@@ -386,7 +386,7 @@ static void *MM_heap_realloc(void *block, size_t size)
     if (MM_heap.active)
     {
         v = MM_heap_reserve(size);
-        sysMemCpy(v, block, size);
+        memmove(v, block, size);
     } else v=(u_int8_t*)MM_std.realloc(block, size);
     return v;
 }
