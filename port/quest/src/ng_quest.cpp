@@ -464,7 +464,7 @@ void updateInput() {
     /* recentre: both stick clicks held 1 s */
     if (lc && rc) {
         if (!s_recenterHoldStart) s_recenterHoldStart = now;
-        else if (now - s_recenterHoldStart > 1000) { s_recenterPending = true; s_recenterHoldStart = 0xffffffffu; }
+        else if (s_recenterHoldStart != 0xffffffffu && now - s_recenterHoldStart > 1000) { s_recenterPending = true; s_recenterHoldStart = 0xffffffffu; }
     } else s_recenterHoldStart = 0;
 
     if (s_frameNo % 720 == 5)

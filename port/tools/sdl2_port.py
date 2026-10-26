@@ -301,4 +301,40 @@ edit("rlx32/src/gui_os.c", "    }while(!finish);\n\n\tif (finish == 1)\n\t\tsysS
 edit("src/lt_menu.c", "\tif (mode!=2)\n\t\tret = RW_RenderSelection(p);\n\n    GX.Client->Unlock();\n    GX.View.Flip();\n",
      "\tif (mode!=2)\n\t\tret = RW_RenderSelection(p);\n#ifdef NG_QUEST\n\t{ extern void NGQ_VKeyboardDraw(void); NGQ_VKeyboardDraw(); }\n#endif\n\n    GX.Client->Unlock();\n    GX.View.Flip();\n")
 
+# Quest debug: describe the player's shot geometry once per weapon type (aiming investigation)
+edit("src/lt_weap.c", "                Jj->pInf.ShootAxe|=128;\n",
+     """#ifdef NG_QUEST
+                if (Jj == &g_pPlayer->J)
+                {
+                    static u_int32_t logged;
+                    int code = W->pInf.Code & 31;
+                    if (!(logged & (1u << code)))
+                    {
+                        V3XMESH *m = OVI->mesh;
+                        V3XVECTOR d, lo, hi;
+                        unsigned v;
+                        float *Mx = objAttacker->matrix.Matrix;
+                        logged |= 1u << code;
+                        V3XVector_Dif(&d, &OVI->Tk->vinfo.pos, &objAttacker->matrix.v.Pos);
+                        lo.x = lo.y = lo.z = 1e30f; hi.x = hi.y = hi.z = -1e30f;
+                        for (v = 0; m && m->vertex && v < m->numVerts; v++)
+                        {
+                            V3XVECTOR *p = m->vertex + v;
+                            if (p->x < lo.x) lo.x = p->x; if (p->y < lo.y) lo.y = p->y; if (p->z < lo.z) lo.z = p->z;
+                            if (p->x > hi.x) hi.x = p->x; if (p->y > hi.y) hi.y = p->y; if (p->z > hi.z) hi.z = p->z;
+                        }
+                        printf("[AIM] weapon code %d camera %d axe %d speed %.1f ship radius %.1f\\n", W->pInf.Code, W->Camera, Jj->pInf.ShootAxe & 127, k, Jj->OVI->ORI->global_rayon);
+                        printf("[AIM]  spawn offset in ship axes: right %.1f up %.1f back %.1f (world %.1f %.1f %.1f)\\n",
+                               Mx[0]*d.x + Mx[3]*d.y + Mx[6]*d.z, Mx[1]*d.x + Mx[4]*d.y + Mx[7]*d.z, Mx[2]*d.x + Mx[5]*d.y + Mx[8]*d.z, d.x, d.y, d.z);
+                        printf("[AIM]  shot mesh %u verts, bbox x %.1f..%.1f y %.1f..%.1f z %.1f..%.1f scale %.2f\\n",
+                               m ? m->numVerts : 0, lo.x, hi.x, lo.y, hi.y, lo.z, hi.z, m ? m->scale : 0.f);
+                        printf("[AIM]  camera mode %d, camera-ship distance %.1f\\n", g_SGGame.CameraMode,
+                               V3XVector_Distance(&V3X.Camera.M.v.Pos, &objAttacker->matrix.v.Pos));
+                        fflush(stdout);
+                    }
+                }
+#endif
+                Jj->pInf.ShootAxe|=128;
+""")
+
 print("changed:", sorted(set(changed)) or "nothing (already applied)")
