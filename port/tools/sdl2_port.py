@@ -337,4 +337,10 @@ edit("src/lt_weap.c", "                Jj->pInf.ShootAxe|=128;\n",
                 Jj->pInf.ShootAxe|=128;
 """)
 
+# Quest: leaving the game (main menu Quit) must close the OpenXR session and the Android task.
+edit("rlx32/src/linux/_stublinux.cpp", "int STUB_TaskControl(void)\n{\n",
+     "#ifdef NG_QUEST\nextern \"C\" void NGQ_QuitBegin(void);\nextern \"C\" void NGQ_QuitEnd(void);\n#endif\nint STUB_TaskControl(void)\n{\n")
+edit("rlx32/src/linux/_stublinux.cpp", "  STUB_MainCode();\n  STUB_Down();\n  STUB_QuitRequested();\n",
+     "  STUB_MainCode();\n#ifdef NG_QUEST\n  NGQ_QuitBegin();\n#endif\n  STUB_Down();\n  STUB_QuitRequested();\n#ifdef NG_QUEST\n  NGQ_QuitEnd();\n#endif\n")
+
 print("changed:", sorted(set(changed)) or "nothing (already applied)")

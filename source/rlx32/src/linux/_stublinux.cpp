@@ -31,6 +31,10 @@ Linux/SDL Port: 2005 - Matt Williams
 #include "_rlx.h"
 #include "_stub.h"
 
+#ifdef NG_QUEST
+extern "C" void NGQ_QuitBegin(void);
+extern "C" void NGQ_QuitEnd(void);
+#endif
 int STUB_TaskControl(void)
 {
   // TODO: Support application events - this probably needs to be done in the keyboard handler.
@@ -58,8 +62,14 @@ int main(int argc, char *argv[])
   STUB_ReadyToRun();
   RLX.System.Running = TRUE;
   STUB_MainCode();
+#ifdef NG_QUEST
+  NGQ_QuitBegin();
+#endif
   STUB_Down();
   STUB_QuitRequested();
+#ifdef NG_QUEST
+  NGQ_QuitEnd();
+#endif
 
   return 0;
 }

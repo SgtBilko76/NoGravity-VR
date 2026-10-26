@@ -869,3 +869,45 @@ extern "C" void NGQ_Present(void) {
     glClearColor(0, 0, 0, 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
+
+/* ------------------------------------------------------------------ quit */
+namespace {
+void *quitWatchdog(void *) {
+    sleep(4);
+    __android_log_write(ANDROID_LOG_WARN, TAG, "quit watchdog: shutdown hung, exiting");
+    _exit(0);
+    return nullptr;
+}
+void finishActivity() {
+    if (!s_activity) return;
+    JNIEnv *env = (JNIEnv *)SDL_AndroidGetJNIEnv();
+    if (!env) return;
+    jclass c = env->GetObjectClass(s_activity);
+    jmethodID m = env->GetMethodID(c, "finishAndRemoveTask", "()V");
+    if (m) env->CallVoidMethod(s_activity, m);
+    if (env->ExceptionCheck()) env->ExceptionClear();
+    env->DeleteLocalRef(c);
+}
+} // namespace
+
+/* main menu Quit chosen: game is about to save settings and shut down */
+extern "C" void NGQ_QuitBegin(void) {
+    XRLOG("game quit requested");
+    pthread_t t;
+    pthread_create(&t, nullptr, quitWatchdog, nullptr);
+    pthread_detach(t);
+}
+
+/* game shut down: leave VR cleanly and close the app (back to the Quest home) */
+extern "C" void NGQ_QuitEnd(void) {
+    if (s_sess) {
+        if (s_running) xrRequestExitSession(s_sess);
+        xrDestroySession(s_sess);
+        s_sess = XR_NULL_HANDLE;
+    }
+    if (s_inst) { xrDestroyInstance(s_inst); s_inst = XR_NULL_HANDLE; }
+    XRLOG("OpenXR closed, finishing activity");
+    finishActivity();
+    usleep(300 * 1000);
+    _exit(0);
+}
