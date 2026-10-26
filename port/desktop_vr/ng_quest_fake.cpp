@@ -44,6 +44,7 @@ void NGQ_Boot(void) {}
 void NGQ_CreateVirtualJoystick(void) {}
 int NGQ_IsVirtualJoystick(int) { return 1; }
 void NGQ_FlightTick(void) {}
+void NGQ_SetTextInput(int on) { printf("[FAKEVR] text input %d\n", on); }
 
 void NGQ_InitGL(int w, int h) {
     s_w = w; s_h = h;

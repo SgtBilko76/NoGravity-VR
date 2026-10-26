@@ -224,6 +224,7 @@ float s_throttle = 0.5f;
 SDL_Keycode s_menuDir = 0;
 uint32_t s_menuRepeat = 0;
 std::atomic<uint32_t> s_lastFlightTick{0};
+std::atomic<int> s_textInput{0};
 
 const char *stateName(XrSessionState s) {
     switch (s) {
@@ -407,10 +408,11 @@ void updateInput() {
         const bool btn[12] = {a, b, rt > 0.45f, lt > 0.45f, x, y, rg > 0.45f, lg > 0.45f, rc, lc, menu, false};
         for (int i = 0; i < 12; i++) SDL_JoystickSetVirtualButton(s_vjoy, i, btn[i]);
     }
-    /* menu button = Escape (in flight: pause menu) */
+    /* menu button = Escape (in flight: pause menu; on-screen keyboard: cancel) */
     if (menu != s_prevMenu) sendKey(SDLK_ESCAPE, menu);
-    /* menus only: A = Enter, B = Escape, either stick = arrow keys (with repeat) */
-    if (!flying) {
+    /* menus only: A = Enter, B = Escape, either stick = arrow keys (with repeat);
+       the on-screen keyboard reads the joystick itself */
+    if (!flying && !s_textInput) {
         if (a != s_prevA) sendKey(SDLK_RETURN, a);
         if (b != s_prevB) sendKey(SDLK_ESCAPE, b);
         float sx = fabsf(l.x) > fabsf(r.x) ? l.x : r.x, sy = fabsf(l.y) > fabsf(r.y) ? l.y : r.y;
@@ -655,6 +657,7 @@ extern "C" int NGQ_IsVirtualJoystick(int index) { return index == s_vjoyIndex; }
 
 /* called by the game every flight frame (NG_ReadInput) */
 extern "C" void NGQ_FlightTick(void) { s_lastFlightTick = SDL_GetTicks(); }
+extern "C" void NGQ_SetTextInput(int on) { s_textInput = on; XRLOG("on-screen keyboard %s", on ? "open" : "closed"); }
 
 namespace {
 /* xrWaitFrame + xrBeginFrame + input, once per game frame */

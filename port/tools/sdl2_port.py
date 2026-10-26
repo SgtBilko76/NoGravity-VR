@@ -293,4 +293,12 @@ edit("src/lt_game.c", """                    GX_ClippedLine((V3XVECTOR2*)p1, (V3
     return;
 }""")
 
+# Quest: on-screen keyboard for text entry (port/quest/src/ng_vkbd.c)
+edit("rlx32/src/gui_os.c", "\tRW.current = 0;\n\tpfCallback(pInt, 0);\n\n    do\n    {\n\t\tsKEY->Update(0);\n\t\tsJOY->Update(0);\n",
+     "\tRW.current = 0;\n#ifdef NG_QUEST\n\t{ extern void NGQ_VKeyboardBegin(void); NGQ_VKeyboardBegin(); }\n#endif\n\tpfCallback(pInt, 0);\n\n    do\n    {\n\t\tsKEY->Update(0);\n\t\tsJOY->Update(0);\n#ifdef NG_QUEST\n\t\t{ extern void NGQ_VKeyboardStep(char *, int, u_int8_t *); NGQ_VKeyboardStep(text, numChar, &finish); }\n#endif\n")
+edit("rlx32/src/gui_os.c", "    }while(!finish);\n\n\tif (finish == 1)\n\t\tsysStrnCpy(t, text, numChar);\n",
+     "    }while(!finish);\n#ifdef NG_QUEST\n\t{ extern void NGQ_VKeyboardEnd(void); NGQ_VKeyboardEnd(); }\n#endif\n\n\tif (finish == 1)\n\t\tsysStrnCpy(t, text, numChar);\n")
+edit("src/lt_menu.c", "\tif (mode!=2)\n\t\tret = RW_RenderSelection(p);\n\n    GX.Client->Unlock();\n    GX.View.Flip();\n",
+     "\tif (mode!=2)\n\t\tret = RW_RenderSelection(p);\n#ifdef NG_QUEST\n\t{ extern void NGQ_VKeyboardDraw(void); NGQ_VKeyboardDraw(); }\n#endif\n\n    GX.Client->Unlock();\n    GX.View.Flip();\n")
+
 print("changed:", sorted(set(changed)) or "nothing (already applied)")

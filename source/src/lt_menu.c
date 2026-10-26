@@ -761,6 +761,9 @@ static int NG_RenderingMainMenu(RW_Interface *p, int mode)
     }
 	if (mode!=2)
 		ret = RW_RenderSelection(p);
+#ifdef NG_QUEST
+	{ extern void NGQ_VKeyboardDraw(void); NGQ_VKeyboardDraw(); }
+#endif
 
     GX.Client->Unlock();
     GX.View.Flip();

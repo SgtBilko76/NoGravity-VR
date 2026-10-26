@@ -321,12 +321,18 @@ int RW_InputText(RW_Interface *pInt, char *t, int numChar, PFRWCALLBACK pfCallba
     sysStrnCpy(text, t, 255);
 
 	RW.current = 0;
+#ifdef NG_QUEST
+	{ extern void NGQ_VKeyboardBegin(void); NGQ_VKeyboardBegin(); }
+#endif
 	pfCallback(pInt, 0);
 
     do
     {
 		sKEY->Update(0);
 		sJOY->Update(0);
+#ifdef NG_QUEST
+		{ extern void NGQ_VKeyboardStep(char *, int, u_int8_t *); NGQ_VKeyboardStep(text, numChar, &finish); }
+#endif
 		
 		if (sKEY->scanCode!=m_scanCode)
 		{
@@ -394,6 +400,9 @@ int RW_InputText(RW_Interface *pInt, char *t, int numChar, PFRWCALLBACK pfCallba
 		pfCallback(pInt, 2);
                 
     }while(!finish);
+#ifdef NG_QUEST
+	{ extern void NGQ_VKeyboardEnd(void); NGQ_VKeyboardEnd(); }
+#endif
 
 	if (finish == 1)
 		sysStrnCpy(t, text, numChar);
