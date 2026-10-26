@@ -445,6 +445,22 @@ void updateInput() {
     }
     s_prevA = a; s_prevB = b; s_prevMenu = menu;
 
+    /* left stick short click = Escape (pause menu in flight, back in menus): the Quest's left
+       menu button is taken by the system on this headset (opens the Navigator). Not sent when the
+       click is part of the two-stick recentre gesture or held long. */
+    {
+        static uint32_t lcDown = 0, escUpAt = 0;
+        static bool lcCombo = false, prevLc = false;
+        if (escUpAt && (int32_t)(now - escUpAt) >= 0) { sendKey(SDLK_ESCAPE, false); escUpAt = 0; }
+        if (lc && !prevLc) { lcDown = now; lcCombo = rc; }
+        if (lc && rc) lcCombo = true;
+        if (!lc && prevLc && !lcCombo && now - lcDown < 600) {
+            sendKey(SDLK_ESCAPE, true);
+            escUpAt = now + 100; /* release later: down+up in one game frame would be missed */
+            XRLOG("left stick click -> Escape (flying %d)", (int)flying);
+        }
+        prevLc = lc;
+    }
     /* recentre: both stick clicks held 1 s */
     if (lc && rc) {
         if (!s_recenterHoldStart) s_recenterHoldStart = now;
