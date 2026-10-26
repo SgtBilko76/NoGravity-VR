@@ -367,8 +367,9 @@ void NG_ReadGameConfig(void)
     g_SGSettings.joy[12] = 5; /* next item    = X */
     g_SGSettings.joy[14] = 6; /* next navpoint = Y */
     g_SGSettings.joy[3] = 7;  /* booster (LK_THRUST, forward) = right grip; joy[4] would be the reverse anti-thrust */
-    g_SGSettings.joy[4] = 8;  /* reverse booster (LK_ANTITHRUST) = left grip; radar mode (joy[16]) unbound */
+    g_SGSettings.joy[4] = 8;  /* reverse booster (LK_ANTITHRUST) = left grip */
     g_SGSettings.joy[15] = 9; /* HUD info     = right stick click */
+    g_SGSettings.joy[16] = 10; /* radar mode   = left stick click */
 #endif
     return;
 }

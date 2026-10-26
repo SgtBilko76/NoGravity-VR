@@ -247,6 +247,7 @@ SDL_Keycode s_menuDir = 0;
 uint32_t s_menuRepeat = 0;
 std::atomic<uint32_t> s_lastFlightTick{0};
 std::atomic<int> s_textInput{0};
+bool s_leftClickBtn = false;
 
 const char *stateName(XrSessionState s) {
     switch (s) {
@@ -434,7 +435,7 @@ void updateInput() {
         /* game: throttle = 65535 - lZ, lZ = axis + 32768 */
         SDL_JoystickSetVirtualAxis(s_vjoy, 2, (Sint16)(32767.f - 65535.f * s_throttle));
         SDL_JoystickSetVirtualAxis(s_vjoy, 3, axis(-rx));
-        const bool btn[12] = {a, b, rt > 0.45f, lt > 0.45f, x, y, rg > 0.45f, lg > 0.45f, rc, lc, menu, false};
+        const bool btn[12] = {a, b, rt > 0.45f, lt > 0.45f, x, y, rg > 0.45f, lg > 0.45f, rc, s_leftClickBtn, menu, false};
         for (int i = 0; i < 12; i++) SDL_JoystickSetVirtualButton(s_vjoy, i, btn[i]);
     }
     /* menu button = Escape (in flight: pause menu; on-screen keyboard: cancel) */
@@ -465,20 +466,14 @@ void updateInput() {
     }
     s_prevA = a; s_prevB = b; s_prevMenu = menu;
 
-    /* left stick short click = Escape (pause menu in flight, back in menus): the Quest's left
-       menu button is taken by the system on this headset (opens the Navigator). Not sent when the
-       click is part of the two-stick recentre gesture or held long. */
+    /* left stick click: joystick button 9 = radar mode (game key map); pause/back is the left
+       menu button. Not used while both sticks are held for the recentre gesture. */
     {
-        static uint32_t lcDown = 0, escUpAt = 0;
         static bool lcCombo = false, prevLc = false;
-        if (escUpAt && (int32_t)(now - escUpAt) >= 0) { sendKey(SDLK_ESCAPE, false); escUpAt = 0; }
-        if (lc && !prevLc) { lcDown = now; lcCombo = rc; }
+        if (lc && !prevLc) lcCombo = rc;
         if (lc && rc) lcCombo = true;
-        if (!lc && prevLc && !lcCombo && now - lcDown < 600) {
-            sendKey(SDLK_ESCAPE, true);
-            escUpAt = now + 100; /* release later: down+up in one game frame would be missed */
-            XRLOG("left stick click -> Escape (flying %d)", (int)flying);
-        }
+        s_leftClickBtn = lc && !lcCombo;
+        if (!lc) lcCombo = false;
         prevLc = lc;
     }
     /* recentre: both stick clicks held 1 s */
