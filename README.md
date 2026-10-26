@@ -1,3 +1,11 @@
+# No Gravity VR (Meta Quest)
+
+This fork adds a standalone **Meta Quest VR port** (OpenXR, stereo 3D flight, Touch controls,
+whole game in one APK): see **[README-QUEST.md](README-QUEST.md)** for download, controls and build
+steps. Everything below is the original project's README.
+
+---
+
 # No Gravity
 
 This repository contains the classic `No Gravity` game source code together with a modern `CMake` build setup.

@@ -192,8 +192,10 @@ int NGVR_RenderStereo(V3XSCENE *Scene)
         V3X.ViewPort.Ratio = 1.f;
 
         g_ngqEye = eye;
-        /* aim debug: player's live shots relative to the ship and in this eye's image */
-        if (eye == 0)
+        /* aim debug (env NGQ_DEBUG): player's live shots relative to the ship and in this eye's image */
+        static int s_dbg = -1;
+        if (s_dbg < 0) s_dbg = getenv("NGQ_DEBUG") != NULL;
+        if (eye == 0 && s_dbg)
         {
             static u_int32_t lastLog;
             u_int32_t tnow = timer_ms();
