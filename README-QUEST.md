@@ -1,7 +1,7 @@
-# No Gravity VR for Meta Quest
+# No Gravity VR for Meta Quest and PICO
 
 **No Gravity** (realtech VR, 1997, released as open source under the GPL) as a standalone
-VR game for **Meta Quest 3** (OpenXR). The whole game is inside the APK: no PC, no extra files.
+VR game for **Meta Quest 3** and **PICO 4 / Neo 3** (OpenXR, one APK for both). The whole game is inside the APK: no PC, no extra files.
 
 - Menus on a large floating screen in front of you
 - Flight in real stereo 3D with head tracking: look around the cockpit, ships and
@@ -14,11 +14,12 @@ VR game for **Meta Quest 3** (OpenXR). The whole game is inside the APK: no PC, 
 
 ## Install
 
-1. Download `NoGravity-VR-v0.1.0-beta.apk` from the
+1. Download `NoGravity-VR-v0.1.1-beta.apk` from the
    [Releases](https://github.com/SgtBilko76/NoGravity-VR/releases) page.
 2. Install it with SideQuest (drag the APK onto the window) or with
-   `adb install -r NoGravity-VR-v0.1.0-beta.apk`.
-3. On the Quest: **Library > Unknown Sources > No Gravity VR**.
+   `adb install -r NoGravity-VR-v0.1.1-beta.apk`.
+3. On the Quest: **Library > Unknown Sources > No Gravity VR**. On PICO use adb or the sideloader you
+   already use (SideQuest is a Quest tool); the game is then in the PICO library.
 
 The first start takes a few seconds longer (the game data is unpacked once).
 
@@ -51,7 +52,11 @@ Y = OK, ☰ = cancel.
 
 ## Notes
 
-- Quest 3 only so far (Quest 2 / Pro should work but are untested; no PICO build yet).
+- Tested on Quest 3. Quest 2 / 3S / Pro should work but are untested.
+- **PICO 4 / Neo 3 (untested):** the same APK supports the PICO controllers (same button layout as the
+  Quest controllers, ☰ = the PICO menu button on the left controller). PICO needs PICO OS 5.9.0 or newer.
+  It is not tested on PICO hardware yet: if the game does not start or the controllers do nothing,
+  please open an issue with the output of `adb logcat -s NoGravityVR:*`.
 - Settings and pilots are kept in the app's own storage
   (`/data/data/com.bilko.nogravityvr/files/.realtech/nogravity`).
 - Optional tuning without reinstalling: a text file

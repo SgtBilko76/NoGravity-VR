@@ -1,6 +1,6 @@
 # No Gravity VR (Meta Quest)
 
-This fork adds a standalone **Meta Quest VR port** (OpenXR, stereo 3D flight, Touch controls,
+This fork adds a standalone **Meta Quest and PICO VR port** (OpenXR, stereo 3D flight, Touch controls,
 whole game in one APK): see **[README-QUEST.md](README-QUEST.md)** for download, controls and build
 steps. Everything below is the original project's README.
 

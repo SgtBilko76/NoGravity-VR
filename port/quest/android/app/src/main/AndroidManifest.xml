@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- No Gravity VR: immersive OpenXR app. VR categories + vr_only meta-data make
-     Horizon launch it as a VR app instead of a 2D panel. -->
+<!-- No Gravity VR: immersive OpenXR app for Meta Quest and PICO. The VR categories, vr_only and
+     pvr.app.type meta-data make Horizon / PICO OS launch it as a VR app instead of a 2D panel. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     android:installLocation="auto">
 
@@ -40,6 +40,8 @@
         <meta-data android:name="com.oculus.supportedDevices" android:value="quest2|questpro|quest3|quest3s" />
         <meta-data android:name="com.oculus.intent.category.VR" android:value="vr_only" />
         <meta-data android:name="com.oculus.vr.focusaware" android:value="true" />
+        <!-- PICO: launch as a VR app -->
+        <meta-data android:name="pvr.app.type" android:value="vr" />
 
         <activity
             android:name="com.bilko.nogravityvr.NoGravityActivity"

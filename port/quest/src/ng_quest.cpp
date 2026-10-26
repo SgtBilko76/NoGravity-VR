@@ -343,11 +343,25 @@ void initInput() {
     b.push_back({s_aX, path("/user/hand/left/input/x/click")});
     b.push_back({s_aY, path("/user/hand/left/input/y/click")});
     b.push_back({s_aMenu, path("/user/hand/left/input/menu/click")});
-    XrInteractionProfileSuggestedBinding sb{XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING};
-    sb.interactionProfile = path("/interaction_profiles/oculus/touch_controller");
-    sb.suggestedBindings = b.data();
-    sb.countSuggestedBindings = (uint32_t)b.size();
-    check(xrSuggestInteractionProfileBindings(s_inst, &sb), "xrSuggestInteractionProfileBindings");
+    /* Quest Touch and the PICO 4 / Neo 3 controllers share the button layout (stick, trigger,
+       grip, A/B right, X/Y + menu left), so the same bindings go to every profile. A runtime
+       rejects profiles it does not implement; only none being accepted is a problem. */
+    const char *const profiles[] = {
+        "/interaction_profiles/oculus/touch_controller",
+        "/interaction_profiles/bytedance/pico4_controller",
+        "/interaction_profiles/bytedance/pico_neo3_controller",
+    };
+    int accepted = 0;
+    for (const char *prof : profiles) {
+        XrInteractionProfileSuggestedBinding sb{XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING};
+        if (XR_FAILED(xrStringToPath(s_inst, prof, &sb.interactionProfile))) continue;
+        sb.suggestedBindings = b.data();
+        sb.countSuggestedBindings = (uint32_t)b.size();
+        XrResult r = xrSuggestInteractionProfileBindings(s_inst, &sb);
+        XRLOG("controller profile %s: %s", prof, XR_SUCCEEDED(r) ? "accepted" : "not supported");
+        if (XR_SUCCEEDED(r)) accepted++;
+    }
+    if (!accepted) XRLOG("the runtime accepted none of the controller profiles");
     XrSessionActionSetsAttachInfo at{XR_TYPE_SESSION_ACTION_SETS_ATTACH_INFO};
     at.countActionSets = 1;
     at.actionSets = &s_actSet;
@@ -596,6 +610,9 @@ bool initOpenXR() {
     bool perf = has(XR_EXT_PERFORMANCE_SETTINGS_EXTENSION_NAME), refresh = has(XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME);
     if (perf) en.push_back(XR_EXT_PERFORMANCE_SETTINGS_EXTENSION_NAME);
     if (refresh) en.push_back(XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME);
+    /* PICO controllers: the bytedance/* interaction profiles exist only with this extension
+       (PICO runtimes offer it, Meta's does not) */
+    if (has(XR_BD_CONTROLLER_INTERACTION_EXTENSION_NAME)) en.push_back(XR_BD_CONTROLLER_INTERACTION_EXTENSION_NAME);
 
     XrInstanceCreateInfoAndroidKHR ai{XR_TYPE_INSTANCE_CREATE_INFO_ANDROID_KHR};
     ai.applicationVM = s_vm;
