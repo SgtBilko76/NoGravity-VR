@@ -352,6 +352,23 @@ void NG_ReadGameConfig(void)
     g_SGSettings.ResolutionX = 1024;
     g_SGSettings.ResolutionY = 768;
     g_SGSettings.ColorDepth = 32;
+    /* Touch controllers = analog joystick (port/quest/src/ng_quest.cpp). Buttons: 0 A, 1 B, 2 RT, 3 LT,
+       4 X, 5 Y, 6 R grip, 7 L grip, 8 R stick click; joy[slot] = button+1. Axes: 0/1 left stick,
+       2 throttle lever (lZ), 3 right stick X = roll (lRx). */
+    g_SGSettings.Ctrl = CTRL_Joystick;
+    RLX.Control.Id = RLXCTRL_JoyAnalog;
+    g_SGSettings.AxisThrottle = 1;
+    g_SGSettings.AxisRoll = 2;
+    { int i; for (i = 0; i < LK_MAX; i++) g_SGSettings.joy[i] = 0; }
+    g_SGSettings.joy[9] = 3;  /* fire        = right trigger */
+    g_SGSettings.joy[11] = 4; /* item/missile = left trigger */
+    g_SGSettings.joy[10] = 1; /* lock target  = A */
+    g_SGSettings.joy[8] = 2;  /* next weapon  = B */
+    g_SGSettings.joy[12] = 5; /* next item    = X */
+    g_SGSettings.joy[14] = 6; /* next navpoint = Y */
+    g_SGSettings.joy[4] = 7;  /* booster      = right grip */
+    g_SGSettings.joy[16] = 8; /* radar mode   = left grip */
+    g_SGSettings.joy[15] = 9; /* HUD info     = right stick click */
 #endif
     return;
 }

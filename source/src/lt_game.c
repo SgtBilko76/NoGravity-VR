@@ -955,6 +955,9 @@ static void RollControl(V3XSCALAR ra)
 }
 static void NG_ReadInput(int *dx, int *dy, int *InMax)
 {
+#ifdef NG_QUEST
+    { extern void NGQ_FlightTick(void); NGQ_FlightTick(); }
+#endif
     sKEY->Update(0);
 	sJOY->Update(0);
 
@@ -1821,6 +1824,10 @@ void NG_StarfieldUpdate(void)
         int32_t ct = (Starfield.maxStars/2);
         Starfield.Mx = min(Starfield.maxStars, (unsigned)(ct + (ct * 65536.f / g_cTimer.fCounter)));
     }
+#ifdef NG_QUEST
+    extern int g_ngqEye;
+    if (g_ngqEye == 1) { XCHG(Starfield.Prj[0], Starfield.Prj[2], V3XVECTOR *); XCHG(Starfield.Prj[1], Starfield.Prj[3], V3XVECTOR *); }
+#endif
     XCHG(Starfield.Prj[1], Starfield.Prj[0], V3XVECTOR *);
     for (v=Starfield.Stars, i=0;i<Starfield.Mx;v++, i++)
     {
@@ -1892,6 +1899,9 @@ void NG_StarfieldUpdate(void)
             }
         }
     }
+#ifdef NG_QUEST
+    if (g_ngqEye == 1) { XCHG(Starfield.Prj[0], Starfield.Prj[2], V3XVECTOR *); XCHG(Starfield.Prj[1], Starfield.Prj[3], V3XVECTOR *); }
+#endif
     return;
 }
 /*------------------------------------------------------------------------
@@ -2837,12 +2847,21 @@ void NG_DrawFlash()
     }
 }
 
+#ifdef NG_QUEST
+int g_ngqHudOnly = 0;
+int NGVR_RenderStereo(V3XSCENE *Scene);
+#endif
 void NG_DrawOverlay(void)
 {
+#ifdef NG_QUEST
+    if (!g_ngqHudOnly)
+#endif
+    {
    	NG_FXDraw();
 
     if (g_SGSettings.LensFX)
 		NG_FXFlare();
+    }
 		
     if (g_SGSettings.ticker)
 		NG_DrawTicker();
@@ -2931,11 +2950,23 @@ void NG_GamePlay(void)
 		GX.Client->Lock();
         g_SGSettings.bClearView = 0;
         
+#ifdef NG_QUEST
+        if (NGVR_RenderStereo(g_SGGame.Scene))
+        {
+            extern int g_ngqHudOnly;
+            g_ngqHudOnly = 1;
+            NG_DrawOverlay();
+            g_ngqHudOnly = 0;
+        }
+        else
+#endif
+        {
         // Render scene
         V3XScene_Viewport_Clear(g_SGGame.Scene);
         V3XScene_Viewport_Render(g_SGGame.Scene);
 
 		NG_DrawOverlay();
+        }
     	if (sysConIsActive())
           	sysConRender();
 		// UNLOCK

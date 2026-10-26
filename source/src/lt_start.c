@@ -76,7 +76,7 @@ void NG_StarfieldCreate(void)
     Starfield.Zclip = 1000.f;
     Starfield.Mx = (Starfield.maxStars/2);
     Starfield.Stars = MM_CALLOC(Starfield.maxStars, V3XVECTOR);
-    for (i=0;i<2;i++)
+    for (i=0;i<4;i++) /* NG_QUEST uses [2],[3] for the right eye */
     Starfield.Prj[i] = MM_CALLOC(Starfield.maxStars, V3XVECTOR);
     return;
 }
@@ -91,7 +91,7 @@ void NG_StarfieldRelease(void)
 {
     int i;
     MM_heap.free(Starfield.Stars);
-    for (i=0;i<2;i++) MM_heap.free(Starfield.Prj[i]);
+    for (i=3;i>=0;i--) MM_heap.free(Starfield.Prj[i]);
     return;
 }
 /*------------------------------------------------------------------------

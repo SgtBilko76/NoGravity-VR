@@ -179,6 +179,118 @@ edit("rlx32/src/linux/sysjoy.c", "    // Open the device.  If this fails, just s
 # Quest: the virtual screen has exactly one mode (1024x768, see NG_ListModes). The menus
 # only draw sprites/3D when the configured resolution matches the active mode, so force it.
 edit("src/lt_info.c", "        g_SGSettings.OS = RLX.System.Id;        \n        NG_SaveGameInfo();\n    }\n    return;\n}",
-     "        g_SGSettings.OS = RLX.System.Id;        \n        NG_SaveGameInfo();\n    }\n#ifdef NG_QUEST\n    g_SGSettings.ResolutionX = 1024;\n    g_SGSettings.ResolutionY = 768;\n    g_SGSettings.ColorDepth = 32;\n#endif\n    return;\n}")
+     "        g_SGSettings.OS = RLX.System.Id;        \n        NG_SaveGameInfo();\n    }\n#ifdef NG_QUEST\n    g_SGSettings.ResolutionX = 1024;\n    g_SGSettings.ResolutionY = 768;\n    g_SGSettings.ColorDepth = 32;\n    /* Touch controllers = analog joystick (port/quest/src/ng_quest.cpp). Buttons: 0 A, 1 B, 2 RT, 3 LT,\n       4 X, 5 Y, 6 R grip, 7 L grip, 8 R stick click; joy[slot] = button+1. Axes: 0/1 left stick,\n       2 throttle lever (lZ), 3 right stick X = roll (lRx). */\n    g_SGSettings.Ctrl = CTRL_Joystick;\n    RLX.Control.Id = RLXCTRL_JoyAnalog;\n    g_SGSettings.AxisThrottle = 1;\n    g_SGSettings.AxisRoll = 2;\n    { int i; for (i = 0; i < LK_MAX; i++) g_SGSettings.joy[i] = 0; }\n    g_SGSettings.joy[9] = 3;  /* fire        = right trigger */\n    g_SGSettings.joy[11] = 4; /* item/missile = left trigger */\n    g_SGSettings.joy[10] = 1; /* lock target  = A */\n    g_SGSettings.joy[8] = 2;  /* next weapon  = B */\n    g_SGSettings.joy[12] = 5; /* next item    = X */\n    g_SGSettings.joy[14] = 6; /* next navpoint = Y */\n    g_SGSettings.joy[4] = 7;  /* booster      = right grip */\n    g_SGSettings.joy[16] = 8; /* radar mode   = left grip */\n    g_SGSettings.joy[15] = 9; /* HUD info     = right stick click */\n#endif\n    return;\n}")
+
+# Quest: read the 4th axis (right stick X = roll) into lRx.
+edit("rlx32/src/linux/sysjoy.c", "    sJOY->lZ = (int)SDL_JoystickGetAxis(joy, 2) + 32768;\n",
+     "    sJOY->lZ = (int)SDL_JoystickGetAxis(joy, 2) + 32768;\n#ifdef NG_QUEST\n    sJOY->lRx = (int)SDL_JoystickGetAxis(joy, 3) + 32768;\n#endif\n")
+# Quest: tell the VR host we are flying (menu keys from A/B/sticks are suppressed in flight).
+edit("src/lt_game.c", "static void NG_ReadInput(int *dx, int *dy, int *InMax)\n{\n",
+     "static void NG_ReadInput(int *dx, int *dy, int *InMax)\n{\n#ifdef NG_QUEST\n    { extern void NGQ_FlightTick(void); NGQ_FlightTick(); }\n#endif\n")
+
+# ---------------------------------------------------------------- Quest stereo (port/quest/src/ng_vr_game.c)
+# Geometry-only rebuild for one eye camera: like V3XScene_Viewport_Build minus animated materials,
+# plugins and collision tests (those have game side effects and already ran for this frame).
+edit("rlx32/src/v3xscene.c", "void V3XScene_Viewport_Build(V3XSCENE *Scene, GXVIEWPORT *ViewPrt)\n{\n",
+     """#ifdef NG_QUEST
+static int v3x_qsort_functionZ( const void *a, const void *b);
+void V3XScene_Viewport_BuildEye(V3XSCENE *Scene)
+{
+    unsigned int i;
+    V3XOVI *OVI;
+    V3XORI *ORI;
+    V3X.Buffer.MaxObj = 0;
+    __scene = Scene;
+    V3XViewport_Config();
+    for (i=Scene->numOVI, OVI=Scene->OVI;i!=0;OVI++, i--)
+    {
+        ORI = OVI->ORI;
+        OVI->state &= V3XSTATE_RESETMASK;
+        if (ORI)
+        {
+            if ((V3X.Setup.flags&V3XOPTION_PORTALCULL)&&(OVI->subDefinition&V3XSUBDEF_PSECTOR))
+                OVI->state|=V3XSTATE_BSPCULLED;
+            switch(ORI->type) {
+                case V3XOBJ_MESH:
+                case V3XOBJ_DUMMY:
+                OVI->state |= (OVI->state&V3XSTATE_HIDDEN) ? 0 : V3XSTATE_TOPROCESS;
+                break;
+                case V3XOBJ_NONE:
+                OVI->distance = -10;
+                break;
+                case V3XOBJ_LIGHT:
+                case V3XOBJ_CAMERA:
+                OVI->state |= (OVI->state&V3XSTATE_HIDDEN) ? 0 : V3XSTATE_TOPROCESS;
+                OVI->distance = CST_MAX;
+                break;
+                default:
+                OVI->state |= V3XSTATE_TOPROCESS;
+                OVI->distance = CST_MAX;
+                break;
+            }
+        }
+    }
+    for (i=Scene->numOVI, OVI=Scene->OVI;i!=0;OVI++, i--)
+        if ((OVI->state&V3XSTATE_TOPROCESS)&&(OVI->ORI)&&(OVI->parent)&&(OVI->parent->state&V3XSTATE_MATRIXUPDATE))
+            OVI->state|=V3XSTATE_MATRIXUPDATE|V3XSTATE_TOPROCESS;
+    for (i=Scene->numOVI, OVI=Scene->OVI;i!=0;OVI++, i--)
+        if (OVI->state&V3XSTATE_TOPROCESS)
+            V3XScene_MatrixBuild(OVI);
+    qsort(V3X.Buffer.OVI, V3X.Buffer.MaxObj, sizeof(V3XOVI*), v3x_qsort_functionZ);
+    V3x_render_buildGeometry(Scene, &GX.View, 0);
+}
+#endif
+void V3XScene_Viewport_Build(V3XSCENE *Scene, GXVIEWPORT *ViewPrt)
+{
+""")
+# Flight frame: stereo eyes + HUD-only overlay when the VR host is ready.
+edit("src/lt_game.c", """        // Render scene
+        V3XScene_Viewport_Clear(g_SGGame.Scene);
+        V3XScene_Viewport_Render(g_SGGame.Scene);
+
+		NG_DrawOverlay();
+""", """#ifdef NG_QUEST
+        if (NGVR_RenderStereo(g_SGGame.Scene))
+        {
+            extern int g_ngqHudOnly;
+            g_ngqHudOnly = 1;
+            NG_DrawOverlay();
+            g_ngqHudOnly = 0;
+        }
+        else
+#endif
+        {
+        // Render scene
+        V3XScene_Viewport_Clear(g_SGGame.Scene);
+        V3XScene_Viewport_Render(g_SGGame.Scene);
+
+		NG_DrawOverlay();
+        }
+""")
+edit("src/lt_game.c", "void NG_DrawOverlay(void)\n{\n   \tNG_FXDraw();\n\n    if (g_SGSettings.LensFX)\n\t\tNG_FXFlare();\n",
+     "#ifdef NG_QUEST\nint g_ngqHudOnly = 0;\nint NGVR_RenderStereo(V3XSCENE *Scene);\n#endif\nvoid NG_DrawOverlay(void)\n{\n#ifdef NG_QUEST\n    if (!g_ngqHudOnly)\n#endif\n    {\n   \tNG_FXDraw();\n\n    if (g_SGSettings.LensFX)\n\t\tNG_FXFlare();\n    }\n")
+# Starfield streaks remember last frame's projection: keep a separate pair for the right eye.
+edit("src/lt_game.c", "    XCHG(Starfield.Prj[1], Starfield.Prj[0], V3XVECTOR *);\n",
+     "#ifdef NG_QUEST\n    extern int g_ngqEye;\n    if (g_ngqEye == 1) { XCHG(Starfield.Prj[0], Starfield.Prj[2], V3XVECTOR *); XCHG(Starfield.Prj[1], Starfield.Prj[3], V3XVECTOR *); }\n#endif\n    XCHG(Starfield.Prj[1], Starfield.Prj[0], V3XVECTOR *);\n")
+edit("src/lt_start.c", "    for (i=0;i<2;i++)\n    Starfield.Prj[i] = MM_CALLOC(Starfield.maxStars, V3XVECTOR);\n",
+     "    for (i=0;i<4;i++) /* NG_QUEST uses [2],[3] for the right eye */\n    Starfield.Prj[i] = MM_CALLOC(Starfield.maxStars, V3XVECTOR);\n")
+edit("src/lt_start.c", "    for (i=0;i<2;i++) MM_heap.free(Starfield.Prj[i]);", "    for (i=3;i>=0;i--) MM_heap.free(Starfield.Prj[i]);")
+
+edit("src/lt_game.c", """                    GX_ClippedLine((V3XVECTOR2*)p1, (V3XVECTOR2*)p2, GX.View.BytePerPixel == 1 ? (u_int32_t)(95 - MULF32(zm, W.z+Starfield.Zclip)) : s);
+                }
+            }
+        }
+    }
+    return;
+}""", """                    GX_ClippedLine((V3XVECTOR2*)p1, (V3XVECTOR2*)p2, GX.View.BytePerPixel == 1 ? (u_int32_t)(95 - MULF32(zm, W.z+Starfield.Zclip)) : s);
+                }
+            }
+        }
+    }
+#ifdef NG_QUEST
+    if (g_ngqEye == 1) { XCHG(Starfield.Prj[0], Starfield.Prj[2], V3XVECTOR *); XCHG(Starfield.Prj[1], Starfield.Prj[3], V3XVECTOR *); }
+#endif
+    return;
+}""")
 
 print("changed:", sorted(set(changed)) or "nothing (already applied)")

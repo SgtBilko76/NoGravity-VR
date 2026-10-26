@@ -39,6 +39,8 @@
 #include <vector>
 
 extern "C" void NGL_SetTargetFramebuffer(GLuint fbo, int w, int h);
+extern "C" void NGL_PushScreen(int w, int h);
+extern "C" void NGL_PopScreen(void);
 
 #ifndef GL_SRGB8_ALPHA8
 #define GL_SRGB8_ALPHA8 0x8C43
@@ -188,6 +190,17 @@ XrFrameState s_frame{XR_TYPE_FRAME_STATE};
 int64_t s_colorFormat = GL_RGBA8;
 bool s_srgbWriteControl = false;
 Swapchain s_panelSc;
+/* stereo flight */
+Swapchain s_eyeSc[2];
+GLuint s_eyeDepth[2] = {0, 0};
+int s_eyeSize = 1440;
+XrView s_views[2] = {{XR_TYPE_VIEW}, {XR_TYPE_VIEW}};
+float s_eyeTan = 1.2f;
+bool s_stereoFrame = false, s_stereoRender = false, s_eyesValid = false;
+uint32_t s_eyeIdx[2] = {0, 0};
+float s_hudTanX = 0.8f, s_hudTanY = 0.6f;
+const float kHudDist = 3.0f;
+int s_frameKind = 0, s_lastKind = -1; /* 1 flat, 2 stereo (logged on change) */
 XrEnvironmentBlendMode s_blend = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
 bool s_recenterPending = true, s_recenterDone = false;
 uint64_t s_frameNo = 0;
@@ -207,6 +220,10 @@ XrAction s_aA, s_aB, s_aX, s_aY, s_aMenu;
 XrPath s_hand[2];
 uint32_t s_recenterHoldStart = 0;
 bool s_prevA = false, s_prevB = false, s_prevMenu = false;
+float s_throttle = 0.5f;
+SDL_Keycode s_menuDir = 0;
+uint32_t s_menuRepeat = 0;
+std::atomic<uint32_t> s_lastFlightTick{0};
 
 const char *stateName(XrSessionState s) {
     switch (s) {
@@ -366,30 +383,62 @@ void updateInput() {
     bool a = getBool(s_aA), b = getBool(s_aB), x = getBool(s_aX), y = getBool(s_aY), menu = getBool(s_aMenu);
     bool lc = getBool(s_aClick[0]), rc = getBool(s_aClick[1]);
 
+    const uint32_t now = SDL_GetTicks();
+    const bool flying = (now - s_lastFlightTick) < 250;
+    static uint32_t lastT = 0;
+    float dt = lastT ? (now - lastT) / 1000.f : 0.f;
+    if (dt > 0.1f) dt = 0.1f;
+    lastT = now;
+
+    /* throttle lever: right stick Y moves it, it stays where you leave it (0 = stop, 1 = full) */
+    float ry = fabsf(r.y) > 0.3f ? r.y : 0.f;
+    if (flying) s_throttle += ry * dt * 0.7f;
+    if (s_throttle < 0.f) s_throttle = 0.f;
+    if (s_throttle > 1.f) s_throttle = 1.f;
+    float rx = fabsf(r.x) > 0.25f ? r.x : 0.f;
+
     if (s_vjoy) {
         /* SDL joystick Y is +down; Touch stick Y is +up */
         SDL_JoystickSetVirtualAxis(s_vjoy, 0, axis(l.x));
         SDL_JoystickSetVirtualAxis(s_vjoy, 1, axis(-l.y));
-        SDL_JoystickSetVirtualAxis(s_vjoy, 2, axis(-r.y));
-        SDL_JoystickSetVirtualAxis(s_vjoy, 3, axis(r.x));
-        const bool btn[12] = {rt > 0.45f, a, b, x, y, lt > 0.45f, rg > 0.45f, lg > 0.45f, rc, lc, menu, false};
+        /* game: throttle = 65535 - lZ, lZ = axis + 32768 */
+        SDL_JoystickSetVirtualAxis(s_vjoy, 2, (Sint16)(32767.f - 65535.f * s_throttle));
+        SDL_JoystickSetVirtualAxis(s_vjoy, 3, axis(-rx));
+        const bool btn[12] = {a, b, rt > 0.45f, lt > 0.45f, x, y, rg > 0.45f, lg > 0.45f, rc, lc, menu, false};
         for (int i = 0; i < 12; i++) SDL_JoystickSetVirtualButton(s_vjoy, i, btn[i]);
     }
-    /* menus: A = Enter, B = Escape, menu button = Escape (pause) */
-    if (a != s_prevA) sendKey(SDLK_RETURN, a);
-    if (b != s_prevB) sendKey(SDLK_ESCAPE, b);
+    /* menu button = Escape (in flight: pause menu) */
     if (menu != s_prevMenu) sendKey(SDLK_ESCAPE, menu);
+    /* menus only: A = Enter, B = Escape, either stick = arrow keys (with repeat) */
+    if (!flying) {
+        if (a != s_prevA) sendKey(SDLK_RETURN, a);
+        if (b != s_prevB) sendKey(SDLK_ESCAPE, b);
+        float sx = fabsf(l.x) > fabsf(r.x) ? l.x : r.x, sy = fabsf(l.y) > fabsf(r.y) ? l.y : r.y;
+        SDL_Keycode dir = 0;
+        if (fabsf(sy) > 0.6f && fabsf(sy) >= fabsf(sx)) dir = sy > 0 ? SDLK_UP : SDLK_DOWN;
+        else if (fabsf(sx) > 0.6f) dir = sx > 0 ? SDLK_RIGHT : SDLK_LEFT;
+        if (dir != s_menuDir) {
+            if (s_menuDir) sendKey(s_menuDir, false);
+            if (dir) { sendKey(dir, true); s_menuRepeat = now + 450; }
+            s_menuDir = dir;
+        } else if (dir && now >= s_menuRepeat) {
+            sendKey(dir, false); sendKey(dir, true); s_menuRepeat = now + 160;
+        }
+    } else {
+        if (s_prevA && !a) sendKey(SDLK_RETURN, false);
+        if (s_prevB && !b) sendKey(SDLK_ESCAPE, false);
+        if (s_menuDir) { sendKey(s_menuDir, false); s_menuDir = 0; }
+    }
     s_prevA = a; s_prevB = b; s_prevMenu = menu;
 
     /* recentre: both stick clicks held 1 s */
-    uint32_t now = SDL_GetTicks();
     if (lc && rc) {
         if (!s_recenterHoldStart) s_recenterHoldStart = now;
         else if (now - s_recenterHoldStart > 1000) { s_recenterPending = true; s_recenterHoldStart = 0xffffffffu; }
     } else s_recenterHoldStart = 0;
 
     if (s_frameNo % 720 == 5)
-        printf("[input] L(%.2f %.2f) R(%.2f %.2f) LT %.2f RT %.2f LG %.2f RG %.2f A%d B%d X%d Y%d\n", l.x, l.y, r.x, r.y, lt, rt, lg, rg, a, b, x, y);
+        printf("[input] L(%.2f %.2f) R(%.2f %.2f) LT %.2f RT %.2f LG %.2f RG %.2f A%d B%d X%d Y%d flying %d throttle %.2f\n", l.x, l.y, r.x, r.y, lt, rt, lg, rg, a, b, x, y, (int)flying, s_throttle);
 }
 
 void pollEvents() {
@@ -552,6 +601,25 @@ bool initOpenXR() {
     XRLOG("swapchain format 0x%llx (sRGB write control %d)", (unsigned long long)s_colorFormat, (int)s_srgbWriteControl);
 
     if (!createSwapchain(s_panelSc, s_w, s_h)) return false;
+    {
+        uint32_t vc = 0;
+        xrEnumerateViewConfigurationViews(s_inst, s_sys, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO, 0, &vc, nullptr);
+        std::vector<XrViewConfigurationView> vcv(vc, {XR_TYPE_VIEW_CONFIGURATION_VIEW});
+        xrEnumerateViewConfigurationViews(s_inst, s_sys, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO, vc, &vc, vcv.data());
+        if (vc) XRLOG("recommended eye %ux%u", vcv[0].recommendedImageRectWidth, vcv[0].recommendedImageRectHeight);
+        const char *es = getenv("NGQ_EYE_SIZE");
+        if (es && atoi(es) >= 256) s_eyeSize = atoi(es);
+        for (int e = 0; e < 2; e++) {
+            if (!createSwapchain(s_eyeSc[e], s_eyeSize, s_eyeSize)) return false;
+            glGenRenderbuffers(1, &s_eyeDepth[e]);
+            glBindRenderbuffer(GL_RENDERBUFFER, s_eyeDepth[e]);
+            glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, s_eyeSize, s_eyeSize);
+            for (GLuint fb : s_eyeSc[e].fbos) {
+                glBindFramebuffer(GL_FRAMEBUFFER, fb);
+                glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, s_eyeDepth[e]);
+            }
+        }
+    }
     initInput();
     XRLOG("OpenXR ready");
     return true;
@@ -585,45 +653,79 @@ extern "C" void NGQ_InitGL(int w, int h) {
 
 extern "C" int NGQ_IsVirtualJoystick(int index) { return index == s_vjoyIndex; }
 
-extern "C" void NGQ_Present(void) {
-    if (!s_sess || s_lost) { bindPanel(); return; }
+/* called by the game every flight frame (NG_ReadInput) */
+extern "C" void NGQ_FlightTick(void) { s_lastFlightTick = SDL_GetTicks(); }
+
+namespace {
+/* xrWaitFrame + xrBeginFrame + input, once per game frame */
+bool beginXrFrame() {
     checkRecenterMarker();
     pollEvents();
-    if (!s_running) { SDL_Delay(16); bindPanel(); return; }
-
+    if (!s_running) return false;
     XrFrameWaitInfo wi{XR_TYPE_FRAME_WAIT_INFO};
     s_frame = {XR_TYPE_FRAME_STATE};
-    if (!check(xrWaitFrame(s_sess, &wi, &s_frame), "xrWaitFrame")) { bindPanel(); return; }
+    if (!check(xrWaitFrame(s_sess, &wi, &s_frame), "xrWaitFrame")) return false;
     XrFrameBeginInfo bi{XR_TYPE_FRAME_BEGIN_INFO};
     xrBeginFrame(s_sess, &bi);
     s_frameNo++;
     tryRecenter();
     updateInput();
+    return true;
+}
 
+bool blitPanel(uint32_t *outIdx) {
+    uint32_t idx = 0;
+    XrSwapchainImageAcquireInfo ai{XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
+    if (XR_FAILED(xrAcquireSwapchainImage(s_panelSc.handle, &ai, &idx))) return false;
+    XrSwapchainImageWaitInfo sw{XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
+    sw.timeout = XR_INFINITE_DURATION;
+    xrWaitSwapchainImage(s_panelSc.handle, &sw);
+    if (s_srgbWriteControl) glDisable(GL_FRAMEBUFFER_SRGB_EXT);
+    glDisable(GL_SCISSOR_TEST);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, s_panelFbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, s_panelSc.fbos[idx]);
+    glBlitFramebuffer(0, 0, s_w, s_h, 0, 0, s_w, s_h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    XrSwapchainImageReleaseInfo ri{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
+    xrReleaseSwapchainImage(s_panelSc.handle, &ri);
+    *outIdx = idx;
+    return true;
+}
+
+void endXrFrame(bool stereo) {
     std::vector<const XrCompositionLayerBaseHeader *> layers;
+    XrCompositionLayerProjection proj{XR_TYPE_COMPOSITION_LAYER_PROJECTION};
+    XrCompositionLayerProjectionView pv[2] = {{XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW}, {XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW}};
     XrCompositionLayerQuad quad{XR_TYPE_COMPOSITION_LAYER_QUAD};
     if (s_frame.shouldRender && !s_inBackground) {
-        uint32_t idx = 0;
-        XrSwapchainImageAcquireInfo ai{XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
-        if (XR_SUCCEEDED(xrAcquireSwapchainImage(s_panelSc.handle, &ai, &idx))) {
-            XrSwapchainImageWaitInfo sw{XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
-            sw.timeout = XR_INFINITE_DURATION;
-            xrWaitSwapchainImage(s_panelSc.handle, &sw);
-            if (s_srgbWriteControl) glDisable(GL_FRAMEBUFFER_SRGB_EXT);
-            glDisable(GL_SCISSOR_TEST);
-            glBindFramebuffer(GL_READ_FRAMEBUFFER, s_panelFbo);
-            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, s_panelSc.fbos[idx]);
-            /* engine rows are GL bottom-up already (ortho with y down + GL origin bottom-left) */
-            glBlitFramebuffer(0, 0, s_w, s_h, 0, 0, s_w, s_h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
-            XrSwapchainImageReleaseInfo ri{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
-            xrReleaseSwapchainImage(s_panelSc.handle, &ri);
+        if (stereo && s_eyesValid) {
+            const float a = atanf(s_eyeTan);
+            for (int e = 0; e < 2; e++) {
+                pv[e].pose = s_views[e].pose;
+                pv[e].fov = {-a, a, a, -a};
+                pv[e].subImage.swapchain = s_eyeSc[e].handle;
+                pv[e].subImage.imageRect = {{0, 0}, {s_eyeSize, s_eyeSize}};
+            }
+            proj.space = s_appSpace;
+            proj.viewCount = 2;
+            proj.views = pv;
+            layers.push_back((const XrCompositionLayerBaseHeader *)&proj);
+        }
+        uint32_t idx;
+        if (blitPanel(&idx)) {
             quad.space = s_appSpace;
             quad.eyeVisibility = XR_EYE_VISIBILITY_BOTH;
             quad.pose.orientation = {0, 0, 0, 1};
-            quad.pose.position = {0.f, kPanelY, -kPanelDist};
-            quad.size = {kPanelWidth, kPanelWidth * (float)s_h / (float)s_w};
             quad.subImage.swapchain = s_panelSc.handle;
             quad.subImage.imageRect = {{0, 0}, {s_w, s_h}};
+            if (stereo && s_eyesValid) {
+                /* HUD: transparent layer at the game's own field of view, centred on the ship's nose */
+                quad.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
+                quad.pose.position = {0.f, 0.f, -kHudDist};
+                quad.size = {2.f * kHudDist * s_hudTanX, 2.f * kHudDist * s_hudTanY};
+            } else {
+                quad.pose.position = {0.f, kPanelY, -kPanelDist};
+                quad.size = {kPanelWidth, kPanelWidth * (float)s_h / (float)s_w};
+            }
             layers.push_back((const XrCompositionLayerBaseHeader *)&quad);
         }
     }
@@ -634,11 +736,92 @@ extern "C" void NGQ_Present(void) {
     ei.layers = layers.empty() ? nullptr : layers.data();
     XrResult r = xrEndFrame(s_sess, &ei);
     if (XR_FAILED(r)) check(r, "xrEndFrame");
+    s_frameKind = stereo ? 2 : 1;
+    if (s_frameKind != s_lastKind) {
+        XRLOG("now %s (eye %dx%d tan %.3f, HUD tan %.3f x %.3f)", stereo ? "STEREO flight" : "flat screen", s_eyeSize, s_eyeSize, s_eyeTan, s_hudTanX, s_hudTanY);
+        s_lastKind = s_frameKind;
+    }
     if (s_frameNo % 720 == 1) XRLOG("frame %llu layers %u state %s", (unsigned long long)s_frameNo, ei.layerCount, stateName(s_state));
     if (s_pendingSpace) {
         if (s_appSpace) xrDestroySpace(s_appSpace);
         s_appSpace = s_pendingSpace;
         s_pendingSpace = XR_NULL_HANDLE;
+    }
+}
+} // namespace
+
+extern "C" int NGQ_StereoBegin(void) {
+    s_stereoFrame = s_stereoRender = s_eyesValid = false;
+    if (!s_sess || s_lost || !s_eyeSc[0].handle) return 0;
+    if (getenv("NGQ_FLAT")) return 0;
+    if (!beginXrFrame()) return 0;
+    s_stereoFrame = true;
+    if (!s_frame.shouldRender || s_inBackground) return 0; /* Present still ends the frame */
+    XrViewLocateInfo li{XR_TYPE_VIEW_LOCATE_INFO};
+    li.viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
+    li.displayTime = s_frame.predictedDisplayTime;
+    li.space = s_appSpace;
+    XrViewState vs{XR_TYPE_VIEW_STATE};
+    uint32_t n = 0;
+    s_views[0] = {XR_TYPE_VIEW}; s_views[1] = {XR_TYPE_VIEW};
+    if (XR_FAILED(xrLocateViews(s_sess, &li, &vs, 2, &n, s_views)) || n != 2) return 0;
+    if (!(vs.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT)) return 0;
+    float t = 0.f;
+    for (int e = 0; e < 2; e++) {
+        const XrFovf &f = s_views[e].fov;
+        t = std::max(t, std::max(std::max(tanf(-f.angleLeft), tanf(f.angleRight)), std::max(tanf(f.angleUp), tanf(-f.angleDown))));
+    }
+    if (t > 0.3f && t < 4.f) s_eyeTan = t;
+    s_stereoRender = true;
+    return 1;
+}
+
+extern "C" int NGQ_StereoEyeBegin(int eye, float q[4], float p[3], float *tanHalf, int *w, int *h) {
+    if (!s_stereoRender || eye < 0 || eye > 1) return 0;
+    Swapchain &sc = s_eyeSc[eye];
+    XrSwapchainImageAcquireInfo ai{XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
+    if (XR_FAILED(xrAcquireSwapchainImage(sc.handle, &ai, &s_eyeIdx[eye]))) return 0;
+    XrSwapchainImageWaitInfo sw{XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
+    sw.timeout = XR_INFINITE_DURATION;
+    xrWaitSwapchainImage(sc.handle, &sw);
+    if (s_srgbWriteControl) glDisable(GL_FRAMEBUFFER_SRGB_EXT);
+    glDisable(GL_SCISSOR_TEST);
+    NGL_SetTargetFramebuffer(sc.fbos[s_eyeIdx[eye]], s_eyeSize, s_eyeSize);
+    NGL_PushScreen(s_eyeSize, s_eyeSize);
+    glClearColor(0, 0, 0, 1);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+    const XrPosef &ps = s_views[eye].pose;
+    q[0] = ps.orientation.x; q[1] = ps.orientation.y; q[2] = ps.orientation.z; q[3] = ps.orientation.w;
+    p[0] = ps.position.x; p[1] = ps.position.y; p[2] = ps.position.z;
+    *tanHalf = s_eyeTan;
+    *w = *h = s_eyeSize;
+    return 1;
+}
+
+extern "C" void NGQ_StereoEyeEnd(int eye) {
+    NGL_PopScreen();
+    XrSwapchainImageReleaseInfo ri{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
+    xrReleaseSwapchainImage(s_eyeSc[eye].handle, &ri);
+    if (eye == 1) s_eyesValid = true;
+}
+
+extern "C" void NGQ_StereoHudBegin(float tanX, float tanY) {
+    if (tanX > 0.1f && tanX < 5.f) s_hudTanX = tanX;
+    if (tanY > 0.1f && tanY < 5.f) s_hudTanY = tanY;
+    bindPanel();
+    glDisable(GL_SCISSOR_TEST);
+    glClearColor(0, 0, 0, 0);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+}
+
+extern "C" void NGQ_Present(void) {
+    if (!s_sess || s_lost) { s_stereoFrame = false; bindPanel(); return; }
+    if (s_stereoFrame) {
+        endXrFrame(true);
+        s_stereoFrame = s_stereoRender = false;
+    } else {
+        if (!beginXrFrame()) { SDL_Delay(s_running ? 0 : 16); bindPanel(); return; }
+        endXrFrame(false);
     }
     /* next game frame draws into the panel again */
     bindPanel();

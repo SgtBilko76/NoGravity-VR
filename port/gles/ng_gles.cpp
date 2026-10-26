@@ -218,6 +218,25 @@ void NGL_SetTargetFramebuffer(GLuint fbo, int w, int h) {
     (void)w; (void)h;
 }
 
+/* VR eye pass: draw the engine's pixel coordinates into a w x h target */
+static float s_savedProj[16];
+static GLint s_savedVp[4];
+void NGL_PushScreen(int w, int h) {
+    memcpy(s_savedProj, s_proj, sizeof s_savedProj);
+    ::glGetIntegerv(GL_VIEWPORT, s_savedVp);
+    identity(s_proj);
+    s_proj[0] = 2.f / (float)w;
+    s_proj[5] = -2.f / (float)h;
+    s_proj[10] = -1.f;
+    s_proj[12] = -1.f;
+    s_proj[13] = 1.f;
+    glViewport(0, 0, w, h);
+}
+void NGL_PopScreen(void) {
+    memcpy(s_proj, s_savedProj, sizeof s_savedProj);
+    glViewport(s_savedVp[0], s_savedVp[1], s_savedVp[2], s_savedVp[3]);
+}
+
 void NGL_Begin(GLenum mode) { s_mode = mode; s_verts.clear(); }
 
 void NGL_Vertex3f(GLfloat x, GLfloat y, GLfloat z) {

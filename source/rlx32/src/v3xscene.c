@@ -844,6 +844,54 @@ static int v3x_qsort_functionZ( const void *a, const void *b)
 * DESCRIPTION :  Build scene.
 *
 */
+#ifdef NG_QUEST
+static int v3x_qsort_functionZ( const void *a, const void *b);
+void V3XScene_Viewport_BuildEye(V3XSCENE *Scene)
+{
+    unsigned int i;
+    V3XOVI *OVI;
+    V3XORI *ORI;
+    V3X.Buffer.MaxObj = 0;
+    __scene = Scene;
+    V3XViewport_Config();
+    for (i=Scene->numOVI, OVI=Scene->OVI;i!=0;OVI++, i--)
+    {
+        ORI = OVI->ORI;
+        OVI->state &= V3XSTATE_RESETMASK;
+        if (ORI)
+        {
+            if ((V3X.Setup.flags&V3XOPTION_PORTALCULL)&&(OVI->subDefinition&V3XSUBDEF_PSECTOR))
+                OVI->state|=V3XSTATE_BSPCULLED;
+            switch(ORI->type) {
+                case V3XOBJ_MESH:
+                case V3XOBJ_DUMMY:
+                OVI->state |= (OVI->state&V3XSTATE_HIDDEN) ? 0 : V3XSTATE_TOPROCESS;
+                break;
+                case V3XOBJ_NONE:
+                OVI->distance = -10;
+                break;
+                case V3XOBJ_LIGHT:
+                case V3XOBJ_CAMERA:
+                OVI->state |= (OVI->state&V3XSTATE_HIDDEN) ? 0 : V3XSTATE_TOPROCESS;
+                OVI->distance = CST_MAX;
+                break;
+                default:
+                OVI->state |= V3XSTATE_TOPROCESS;
+                OVI->distance = CST_MAX;
+                break;
+            }
+        }
+    }
+    for (i=Scene->numOVI, OVI=Scene->OVI;i!=0;OVI++, i--)
+        if ((OVI->state&V3XSTATE_TOPROCESS)&&(OVI->ORI)&&(OVI->parent)&&(OVI->parent->state&V3XSTATE_MATRIXUPDATE))
+            OVI->state|=V3XSTATE_MATRIXUPDATE|V3XSTATE_TOPROCESS;
+    for (i=Scene->numOVI, OVI=Scene->OVI;i!=0;OVI++, i--)
+        if (OVI->state&V3XSTATE_TOPROCESS)
+            V3XScene_MatrixBuild(OVI);
+    qsort(V3X.Buffer.OVI, V3X.Buffer.MaxObj, sizeof(V3XOVI*), v3x_qsort_functionZ);
+    V3x_render_buildGeometry(Scene, &GX.View, 0);
+}
+#endif
 void V3XScene_Viewport_Build(V3XSCENE *Scene, GXVIEWPORT *ViewPrt)
 {
     unsigned int i;

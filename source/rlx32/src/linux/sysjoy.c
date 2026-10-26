@@ -163,6 +163,9 @@ static unsigned long JoystickUpdate(void *dev)
     sJOY->lX = (int)SDL_JoystickGetAxis(joy, 0) + 32768;
     sJOY->lY = (int)SDL_JoystickGetAxis(joy, 1) + 32768;
     sJOY->lZ = (int)SDL_JoystickGetAxis(joy, 2) + 32768;
+#ifdef NG_QUEST
+    sJOY->lRx = (int)SDL_JoystickGetAxis(joy, 3) + 32768;
+#endif
 
     // We've succeeded.
     ok = TRUE;
