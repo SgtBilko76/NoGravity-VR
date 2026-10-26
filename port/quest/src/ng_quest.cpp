@@ -15,6 +15,7 @@
 #include <SDL.h>
 #include <EGL/egl.h>
 #include <GLES3/gl3.h>
+#include <GLES2/gl2ext.h>
 #include <android/log.h>
 #include <jni.h>
 #include <dlfcn.h>
@@ -157,6 +158,24 @@ extern "C" void NGQ_Boot(void) {
         __android_log_print(ANDROID_LOG_INFO, TAG, "cwd = %s", s_filesDir.c_str());
         extractAsset("NOGRAVITY.RMX", s_filesDir + "/NOGRAVITY.RMX");
     }
+    /* optional tuning: KEY=VALUE lines (e.g. NGQ_EYE_SIZE=2400, NGQ_MSAA=4) in
+       /sdcard/Android/data/com.bilko.nogravityvr/files/env.txt (adb push-able) */
+    if (const char *ext = SDL_AndroidGetExternalStoragePath()) {
+        std::string envPath = std::string(ext) + "/env.txt";
+        if (FILE *f = fopen(envPath.c_str(), "r")) {
+            char line[256];
+            while (fgets(line, sizeof line, f)) {
+                char *eq = strchr(line, '=');
+                if (!eq || line[0] == '#') continue;
+                *eq = 0;
+                char *v = eq + 1;
+                v[strcspn(v, "\r\n")] = 0;
+                setenv(line, v, 1);
+                __android_log_print(ANDROID_LOG_INFO, TAG, "env.txt: %s=%s", line, v);
+            }
+            fclose(f);
+        }
+    }
 }
 
 /* Touch controllers as a PC joystick for the game (sysjoy.c opens exactly this one).
@@ -193,7 +212,8 @@ Swapchain s_panelSc;
 /* stereo flight */
 Swapchain s_eyeSc[2];
 GLuint s_eyeDepth[2] = {0, 0};
-int s_eyeSize = 1440;
+int s_eyeSize = 2400;   /* square, covers the widest eye FOV (tan ~1.43): ~840 px per tan unit */
+int s_msaa = 4;         /* 0 = off; tiled MSAA via GL_EXT_multisampled_render_to_texture */
 XrView s_views[2] = {{XR_TYPE_VIEW}, {XR_TYPE_VIEW}};
 float s_eyeTan = 1.2f;
 bool s_stereoFrame = false, s_stereoRender = false, s_eyesValid = false;
@@ -648,16 +668,34 @@ bool initOpenXR() {
         if (vc) XRLOG("recommended eye %ux%u", vcv[0].recommendedImageRectWidth, vcv[0].recommendedImageRectHeight);
         const char *es = getenv("NGQ_EYE_SIZE");
         if (es && atoi(es) >= 256) s_eyeSize = atoi(es);
+        const char *ms = getenv("NGQ_MSAA");
+        if (ms) s_msaa = atoi(ms);
+        PFNGLFRAMEBUFFERTEXTURE2DMULTISAMPLEEXTPROC fbTexMS = nullptr;
+        PFNGLRENDERBUFFERSTORAGEMULTISAMPLEEXTPROC rbMS = nullptr;
+        if (s_msaa > 1 && glExts && strstr(glExts, "GL_EXT_multisampled_render_to_texture")) {
+            fbTexMS = (PFNGLFRAMEBUFFERTEXTURE2DMULTISAMPLEEXTPROC)eglGetProcAddress("glFramebufferTexture2DMultisampleEXT");
+            rbMS = (PFNGLRENDERBUFFERSTORAGEMULTISAMPLEEXTPROC)eglGetProcAddress("glRenderbufferStorageMultisampleEXT");
+            GLint maxS = 0;
+            glGetIntegerv(GL_MAX_SAMPLES_EXT, &maxS);
+            if (maxS > 0 && s_msaa > maxS) s_msaa = maxS;
+        }
+        if (!fbTexMS || !rbMS) s_msaa = 0;
         for (int e = 0; e < 2; e++) {
             if (!createSwapchain(s_eyeSc[e], s_eyeSize, s_eyeSize)) return false;
             glGenRenderbuffers(1, &s_eyeDepth[e]);
             glBindRenderbuffer(GL_RENDERBUFFER, s_eyeDepth[e]);
-            glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, s_eyeSize, s_eyeSize);
-            for (GLuint fb : s_eyeSc[e].fbos) {
-                glBindFramebuffer(GL_FRAMEBUFFER, fb);
+            if (s_msaa > 1) rbMS(GL_RENDERBUFFER, s_msaa, GL_DEPTH24_STENCIL8, s_eyeSize, s_eyeSize);
+            else glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, s_eyeSize, s_eyeSize);
+            for (size_t i = 0; i < s_eyeSc[e].fbos.size(); i++) {
+                glBindFramebuffer(GL_FRAMEBUFFER, s_eyeSc[e].fbos[i]);
+                if (s_msaa > 1)
+                    fbTexMS(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, s_eyeSc[e].images[i].image, 0, s_msaa);
                 glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, s_eyeDepth[e]);
+                GLenum st = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+                if (st != GL_FRAMEBUFFER_COMPLETE) XRLOG("eye %d fbo %zu incomplete 0x%x", e, i, st);
             }
         }
+        XRLOG("eye buffers %dx%d, MSAA %dx", s_eyeSize, s_eyeSize, s_msaa > 1 ? s_msaa : 1);
     }
     initInput();
     XRLOG("OpenXR ready");
@@ -842,6 +880,10 @@ extern "C" int NGQ_StereoEyeBegin(int eye, float q[4], float p[3], float *tanHal
 
 extern "C" void NGQ_StereoEyeEnd(int eye) {
     NGL_PopScreen();
+    {   /* depth is not needed after the eye pass: don't write it back to memory */
+        const GLenum dsc = GL_DEPTH_STENCIL_ATTACHMENT;
+        glInvalidateFramebuffer(GL_FRAMEBUFFER, 1, &dsc);
+    }
     XrSwapchainImageReleaseInfo ri{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
     xrReleaseSwapchainImage(s_eyeSc[eye].handle, &ri);
     if (eye == 1) s_eyesValid = true;
