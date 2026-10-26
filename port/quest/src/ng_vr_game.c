@@ -117,6 +117,22 @@ int NGVR_RenderStereo(V3XSCENE *Scene)
 
     if (!NGQ_StereoBegin())
         return 0;
+    {   /* test aid: NGQ_TEST_FLASH=1 -> red hit flash every 2 s */
+        static int test = -1;
+        static u_int32_t next;
+        if (test < 0) test = getenv("NGQ_TEST_FLASH") ? atoi(getenv("NGQ_TEST_FLASH")) : 0;
+        if (test == 2)
+        {   /* constant green flash (screenshot tests) */
+            RGB_Set(g_SGGame.FlashColor, 0, 255, 0);
+            g_SGGame.FlashAlpha = 8;
+        }
+        else if (test && timer_ms() > next)
+        {
+            next = timer_ms() + 2000;
+            RGB_Set(g_SGGame.FlashColor, 255, 0, 0);
+            g_SGGame.FlashAlpha = 16;
+        }
+    }
 
     cam = V3X.Camera;
     view = GX.View;
@@ -221,6 +237,13 @@ int NGVR_RenderStereo(V3XSCENE *Scene)
         NG_FXDraw();
         if (g_SGSettings.LensFX)
             NG_FXFlare();
+        /* hit / explosion flash over the whole eye view (flat game: over the screen) */
+        if (g_SGGame.FlashAlpha)
+        {
+            GX.csp_cfg.alpha = abs(g_SGGame.FlashAlpha * 8) > 255 ? 255 : abs(g_SGGame.FlashAlpha * 8);
+            CSP_Color(RGB_PixelFormat(g_SGGame.FlashColor.r, g_SGGame.FlashColor.g, g_SGGame.FlashColor.b));
+            GX.gi.drawShadedRect(0, 0, w - 1, h - 1, NULL);
+        }
         g_ngqEye = -1;
         NGQ_StereoEyeEnd(eye);
     }

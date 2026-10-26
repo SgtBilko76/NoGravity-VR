@@ -418,4 +418,15 @@ edit("rlx32/src/v3xscen2.c", "            if (OVI->node) OVI->Tk = &OVI->node->T
      "            if (OVI->node) OVI->Tk = (ORI->type == V3XOBJ_LIGHT) ? &OVI->light->Tk : (ORI->type == V3XOBJ_CAMERA) ? &OVI->camera->Tk : &OVI->node->Tk;")
 edit("rlx32/include/v3xscene.h", "}V3XNODE;\n", "}V3XNODE;\n#define V3XNODE_SIZEOF(type) ((type) == V3XOBJ_LIGHT ? sizeof(V3XLIGHT) : (type) == V3XOBJ_CAMERA ? sizeof(V3XCAMERA) : sizeof(V3XMESH))\n")
 
+# Quest: in stereo flight the hit/explosion flash is drawn over each eye's whole view
+# (ng_vr_game.c); the HUD panel must not show it as a flat flashing rectangle.
+edit("src/lt_game.c", """        GX.csp_cfg.alpha = min(255, abs(g_SGGame.FlashAlpha*8));
+       \tCSP_Color(RGB_PixelFormat(g_SGGame.FlashColor.r, g_SGGame.FlashColor.g, g_SGGame.FlashColor.b));
+\t\tif (V3X.Client->Capabilities&GXSPEC_HARDWARE)""", """        GX.csp_cfg.alpha = min(255, abs(g_SGGame.FlashAlpha*8));
+       \tCSP_Color(RGB_PixelFormat(g_SGGame.FlashColor.r, g_SGGame.FlashColor.g, g_SGGame.FlashColor.b));
+#ifdef NG_QUEST
+\t\t{ extern int g_ngqHudOnly; if (g_ngqHudOnly) return; }
+#endif
+\t\tif (V3X.Client->Capabilities&GXSPEC_HARDWARE)""")
+
 print("changed:", sorted(set(changed)) or "nothing (already applied)")

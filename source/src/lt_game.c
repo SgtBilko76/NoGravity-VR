@@ -2854,6 +2854,9 @@ void NG_DrawFlash()
 
         GX.csp_cfg.alpha = min(255, abs(g_SGGame.FlashAlpha*8));
        	CSP_Color(RGB_PixelFormat(g_SGGame.FlashColor.r, g_SGGame.FlashColor.g, g_SGGame.FlashColor.b));
+#ifdef NG_QUEST
+		{ extern int g_ngqHudOnly; if (g_ngqHudOnly) return; }
+#endif
 		if (V3X.Client->Capabilities&GXSPEC_HARDWARE)
 		{
       		GX.gi.drawShadedRect(0, 0, GX.View.lWidth-1, GX.View.lHeight-1, NULL);
