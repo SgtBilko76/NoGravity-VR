@@ -418,7 +418,10 @@ void updateInput() {
         for (int i = 0; i < 12; i++) SDL_JoystickSetVirtualButton(s_vjoy, i, btn[i]);
     }
     /* menu button = Escape (in flight: pause menu; on-screen keyboard: cancel) */
-    if (menu != s_prevMenu) sendKey(SDLK_ESCAPE, menu);
+    if (menu != s_prevMenu) {
+        sendKey(SDLK_ESCAPE, menu);
+        XRLOG("menu button %s (flying %d, keyboard %d) -> Escape", menu ? "down" : "up", (int)flying, (int)s_textInput);
+    }
     /* menus only: A = Enter, B = Escape, either stick = arrow keys (with repeat);
        the on-screen keyboard reads the joystick itself */
     if (!flying && !s_textInput) {
@@ -449,7 +452,7 @@ void updateInput() {
     } else s_recenterHoldStart = 0;
 
     if (s_frameNo % 720 == 5)
-        printf("[input] L(%.2f %.2f) R(%.2f %.2f) LT %.2f RT %.2f LG %.2f RG %.2f A%d B%d X%d Y%d flying %d throttle %.2f\n", l.x, l.y, r.x, r.y, lt, rt, lg, rg, a, b, x, y, (int)flying, s_throttle);
+        printf("[input] L(%.2f %.2f) R(%.2f %.2f) LT %.2f RT %.2f LG %.2f RG %.2f A%d B%d X%d Y%d M%d flying %d throttle %.2f\n", l.x, l.y, r.x, r.y, lt, rt, lg, rg, a, b, x, y, (int)menu, (int)flying, s_throttle);
 }
 
 void pollEvents() {
