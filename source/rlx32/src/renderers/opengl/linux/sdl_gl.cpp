@@ -106,7 +106,7 @@ static GXDISPLAYMODEINFO RLXAPI *EnumDisplayList(int bpp)
 #ifdef NG_SDL2
   if (g_pDisplays == NULL)
   {
-    g_pDisplays = NG_ListModes(g_pRLX);
+    g_pDisplays = (GXDISPLAYMODEINFO *)NG_ListModes(g_pRLX);
   }
   if (0)
 #else

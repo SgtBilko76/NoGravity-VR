@@ -3,3 +3,7 @@ port/deps/
 port/deps-android/
 port/vcpkg/*/vcpkg_installed/
 *.log
+port/quest/android/app/build/
+port/quest/android/app/.cxx/
+port/quest/android/.gradle/
+port/quest/android/local.properties

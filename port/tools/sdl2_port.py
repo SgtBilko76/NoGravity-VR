@@ -51,7 +51,7 @@ edit(GL, "    glFinish();\n    SDL_GL_SwapBuffers();\n",
      "#ifdef NG_SDL2\n    NG_SwapWindow();\n#else\n    glFinish();\n    SDL_GL_SwapBuffers();\n#endif\n")
 # Mode list: SDL2 has no SDL_ListModes. Offer fixed 4:3 modes (the game UI is 4:3).
 edit(GL, "  if (g_pDisplays == NULL)\n  {\n    memset(&fmts, 0, sizeof(SDL_PixelFormat));\n",
-     "#ifdef NG_SDL2\n  if (g_pDisplays == NULL)\n  {\n    g_pDisplays = NG_ListModes(g_pRLX);\n  }\n  if (0)\n#else\n  if (g_pDisplays == NULL)\n#endif\n  {\n    memset(&fmts, 0, sizeof(SDL_PixelFormat));\n")
+     "#ifdef NG_SDL2\n  if (g_pDisplays == NULL)\n  {\n    g_pDisplays = (GXDISPLAYMODEINFO *)NG_ListModes(g_pRLX);\n  }\n  if (0)\n#else\n  if (g_pDisplays == NULL)\n#endif\n  {\n    memset(&fmts, 0, sizeof(SDL_PixelFormat));\n")
 edit(GL, "  const SDL_VideoInfo *vid_info;\n  SDL_PixelFormat fmts[3];\n",
      "#ifndef NG_SDL2\n  const SDL_VideoInfo *vid_info;\n#endif\n  SDL_PixelFormat fmts[3];\n")
 edit(GL, "      vid_info = SDL_GetVideoInfo();\n      memcpy(&fmts[0], vid_info->vfmt, sizeof(SDL_PixelFormat));\n",
@@ -170,5 +170,10 @@ edit("rlx32/src/gx_flc.c", "        pAnim->start_buf = (u_int32_t)pAnim->fileBuf
 # GLES renderer path (Quest): ng_gles.h emulates the GL 1.x slice the renderer uses.
 edit("rlx32/src/renderers/opengl/gl_v3x.h", "#elif (defined __LINUX__)\n#define GL_GLEXT_PROTOTYPES\n#include <GL/gl.h>\n#include <GL/glext.h>\n",
      "#elif (defined __LINUX__) && defined(NG_GLES)\n#include \"ng_gles.h\"\n\n#elif (defined __LINUX__)\n#define GL_GLEXT_PROTOTYPES\n#include <GL/gl.h>\n#include <GL/glext.h>\n")
+
+# Quest: the joystick driver must open the virtual Touch joystick, not the Quest's own
+# Android gamepad devices (they never send input in an immersive OpenXR app).
+edit("rlx32/src/linux/sysjoy.c", "    // Open the device.  If this fails, just skip it.\n    joy = SDL_JoystickOpen(idx);\n",
+     "#ifdef NG_QUEST\n    {\n      extern int NGQ_IsVirtualJoystick(int index);\n      if (!NGQ_IsVirtualJoystick(idx)) continue;\n    }\n#endif\n    // Open the device.  If this fails, just skip it.\n    joy = SDL_JoystickOpen(idx);\n")
 
 print("changed:", sorted(set(changed)) or "nothing (already applied)")

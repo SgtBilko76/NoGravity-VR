@@ -3,6 +3,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include "ng_sdl2.h"
+#ifdef NG_QUEST
+#include "ng_quest.h"
+#endif
 
 #include "_rlx32.h"
 #include "_rlx.h"
@@ -20,15 +23,26 @@ static int g_w = 640, g_h = 480;
 void NG_Startup(int argc, char **argv)
 {
     (void)argc; (void)argv;
+#ifdef NG_QUEST
+    NGQ_Boot();
+#endif
     SDL_SetHint(SDL_HINT_NO_SIGNAL_HANDLERS, "1");
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_EVENTS | SDL_INIT_JOYSTICK) != 0)
         fprintf(stderr, "[NG] SDL_Init failed: %s\n", SDL_GetError());
+#ifdef NG_QUEST
+    NGQ_CreateVirtualJoystick();
+#endif
     fprintf(stderr, "[NG] SDL %d.%d.%d started\n", SDL_MAJOR_VERSION, SDL_MINOR_VERSION, SDL_PATCHLEVEL);
 }
 
 void *NG_ListModes(struct RLXSYSTEM *rlx)
 {
+#ifdef NG_QUEST
+    /* one fixed 4:3 mode: the frame becomes the VR virtual screen */
+    static const int sizes[][2] = { {1024, 768} };
+#else
     static const int sizes[][2] = { {640, 480}, {800, 600}, {1024, 768}, {1280, 960}, {1600, 1200} };
+#endif
     static const int bpps[] = { 16, 32 };
     const int n = (int)(sizeof(sizes) / sizeof(sizes[0])) * 2;
     GXDISPLAYMODEINFO *d = (GXDISPLAYMODEINFO *)rlx->mm_heap->malloc((n + 1) * sizeof(GXDISPLAYMODEINFO));
@@ -49,6 +63,9 @@ void *NG_ListModes(struct RLXSYSTEM *rlx)
 void *NG_CreateWindow(int w, int h, int fullscreen, int msaa)
 {
     Uint32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN;
+#ifdef NG_QUEST
+    fullscreen = 1;
+#endif
     const char *forceWin = SDL_getenv("NG_WINDOWED");
     if (forceWin && *forceWin == '1')
         fullscreen = 0;
@@ -85,6 +102,9 @@ void *NG_CreateWindow(int w, int h, int fullscreen, int msaa)
             return NULL;
         }
         SDL_GL_SetSwapInterval(1);
+#ifdef NG_QUEST
+        NGQ_InitGL(w, h);
+#endif
     }
     else
     {
@@ -108,6 +128,10 @@ SDL_Window *NG_GetWindow(void) { return g_win; }
 
 void NG_SwapWindow(void)
 {
+#ifdef NG_QUEST
+    NGQ_Present();
+    return;
+#endif
     if (NG_PresentHook)
     {
         NG_PresentHook();

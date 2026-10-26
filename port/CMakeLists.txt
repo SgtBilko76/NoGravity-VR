@@ -26,6 +26,19 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
 endif()
 
 # ---------------------------------------------------------------- dependencies
+if(ANDROID)
+    # vcpkg arm64-android static libs (port/vcpkg/android), Khronos OpenXR loader
+    set(NG_DEPS ${CMAKE_CURRENT_SOURCE_DIR}/deps-android/arm64-android)
+    list(APPEND CMAKE_PREFIX_PATH ${NG_DEPS})
+    list(APPEND CMAKE_FIND_ROOT_PATH ${NG_DEPS})
+    set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE BOTH)
+    set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY BOTH)
+    set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE BOTH)
+    # Gradle debug builds pass -O0: keep the engine optimised
+    set(CMAKE_C_FLAGS_DEBUG "-O2 -g")
+    set(CMAKE_CXX_FLAGS_DEBUG "-O2 -g")
+    set(NG_GLES ON CACHE BOOL "" FORCE)
+endif()
 find_package(SDL2 REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(PNG REQUIRED)
@@ -86,7 +99,12 @@ endif()
 set(NG_INCLUDES ${PORT}/compat ${PORT}/sdl2 ${PORT}/gen ${RLX}/include ${SRC} ${RLX}/src ${RLX}/src/linux
     ${RLX}/src/renderers/opengl ${RLX}/src/renderers/opengl/linux)
 
-set(NG_LIBS SDL2::SDL2 ZLIB::ZLIB PNG::PNG Vorbis::vorbisfile Vorbis::vorbis Ogg::ogg ${NG_MIXER})
+if(ANDROID)
+    set(NG_SDL SDL2::SDL2main SDL2::SDL2-static)
+else()
+    set(NG_SDL SDL2::SDL2)
+endif()
+set(NG_LIBS ${NG_MIXER} ${NG_SDL} ZLIB::ZLIB PNG::PNG Vorbis::vorbisfile Vorbis::vorbis Ogg::ogg)
 
 if(NG_GLES)
     list(APPEND PLATFORM_SOURCES ${PORT}/gles/ng_gles.cpp)
@@ -100,6 +118,12 @@ if(ANDROID)
     set(NG_TARGET main)
     list(APPEND NG_DEFS NG_QUEST)
     list(APPEND NG_INCLUDES ${PORT}/quest/src)
+    add_library(openxr_loader SHARED IMPORTED)
+    set_target_properties(openxr_loader PROPERTIES
+        IMPORTED_LOCATION ${PORT}/quest/third_party/openxr/lib/arm64-v8a/libopenxr_loader.so
+        INTERFACE_INCLUDE_DIRECTORIES ${PORT}/quest/third_party/openxr/include)
+    list(APPEND NG_LIBS openxr_loader GLESv3 EGL android log OpenSLES dl)
+    target_link_options(main PRIVATE -Wl,--no-undefined -Wl,-z,max-page-size=16384)
 else()
     add_executable(nogravity ${GAME_SOURCES} ${ENGINE_SOURCES} ${PLATFORM_SOURCES})
     set(NG_TARGET nogravity)

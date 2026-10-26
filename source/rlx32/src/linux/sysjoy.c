@@ -46,6 +46,12 @@ static int JoystickOpen(void *hnd, int force_feedback)
   // For each joystick device...
   for (idx = 0; idx < SDL_NumJoysticks(); idx ++)
   {
+#ifdef NG_QUEST
+    {
+      extern int NGQ_IsVirtualJoystick(int index);
+      if (!NGQ_IsVirtualJoystick(idx)) continue;
+    }
+#endif
     // Open the device.  If this fails, just skip it.
     joy = SDL_JoystickOpen(idx);
     if (joy == NULL)
