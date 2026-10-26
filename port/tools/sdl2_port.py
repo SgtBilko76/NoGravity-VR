@@ -176,4 +176,9 @@ edit("rlx32/src/renderers/opengl/gl_v3x.h", "#elif (defined __LINUX__)\n#define 
 edit("rlx32/src/linux/sysjoy.c", "    // Open the device.  If this fails, just skip it.\n    joy = SDL_JoystickOpen(idx);\n",
      "#ifdef NG_QUEST\n    {\n      extern int NGQ_IsVirtualJoystick(int index);\n      if (!NGQ_IsVirtualJoystick(idx)) continue;\n    }\n#endif\n    // Open the device.  If this fails, just skip it.\n    joy = SDL_JoystickOpen(idx);\n")
 
+# Quest: the virtual screen has exactly one mode (1024x768, see NG_ListModes). The menus
+# only draw sprites/3D when the configured resolution matches the active mode, so force it.
+edit("src/lt_info.c", "        g_SGSettings.OS = RLX.System.Id;        \n        NG_SaveGameInfo();\n    }\n    return;\n}",
+     "        g_SGSettings.OS = RLX.System.Id;        \n        NG_SaveGameInfo();\n    }\n#ifdef NG_QUEST\n    g_SGSettings.ResolutionX = 1024;\n    g_SGSettings.ResolutionY = 768;\n    g_SGSettings.ColorDepth = 32;\n#endif\n    return;\n}")
+
 print("changed:", sorted(set(changed)) or "nothing (already applied)")

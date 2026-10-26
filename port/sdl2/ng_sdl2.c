@@ -45,6 +45,16 @@ void *NG_ListModes(struct RLXSYSTEM *rlx)
 #endif
     static const int bpps[] = { 16, 32 };
     const int n = (int)(sizeof(sizes) / sizeof(sizes[0])) * 2;
+    const char *one = SDL_getenv("NG_MODE"); /* e.g. 1024x768: offer only this mode (test the Quest mode on PC) */
+    if (one) {
+        GXDISPLAYMODEINFO *d1 = (GXDISPLAYMODEINFO *)rlx->mm_heap->malloc(3 * sizeof(GXDISPLAYMODEINFO));
+        int w = 1024, h = 768;
+        sscanf(one, "%dx%d", &w, &h);
+        d1[0].lWidth = w; d1[0].lHeight = h; d1[0].BitsPerPixel = 16; d1[0].mode = 0;
+        d1[1].lWidth = w; d1[1].lHeight = h; d1[1].BitsPerPixel = 32; d1[1].mode = 1;
+        d1[2].lWidth = d1[2].lHeight = d1[2].BitsPerPixel = 0; d1[2].mode = 0;
+        return d1;
+    }
     GXDISPLAYMODEINFO *d = (GXDISPLAYMODEINFO *)rlx->mm_heap->malloc((n + 1) * sizeof(GXDISPLAYMODEINFO));
     int i = 0, b, s;
     for (b = 0; b < 2; b++)

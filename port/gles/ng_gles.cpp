@@ -17,6 +17,8 @@
 #undef glViewport
 #undef glClear
 #undef glFinish
+#undef glBindTexture
+#undef glGetString
 
 #ifdef __ANDROID__
 #include <android/log.h>
@@ -197,6 +199,18 @@ const void *toRGBA(GLenum format, GLenum type, GLsizei w, GLsizei h, const void 
 extern "C" {
 
 void NGL_Init(void) { ensureInit(); }
+
+void NGL_BindTexture(GLenum target, GLuint tex) {
+    if (target == GL_TEXTURE_RECTANGLE_ARB) target = GL_TEXTURE_2D;
+    glBindTexture(target, tex);
+}
+
+/* Hide desktop-only extensions the renderer would otherwise use (rectangle textures,
+   paletted textures, S3TC): ES 3 has none of them, the power-of-two path works everywhere. */
+const GLubyte *NGL_GetString(GLenum name) {
+    if (name == GL_EXTENSIONS) return (const GLubyte *)"GL_ARB_multitexture";
+    return glGetString(name);
+}
 
 void NGL_SetTargetFramebuffer(GLuint fbo, int w, int h) {
     s_targetFbo = fbo;

@@ -150,6 +150,8 @@ extern "C" void NGQ_Boot(void) {
         s_filesDir = internal;
         mkdir(s_filesDir.c_str(), 0755);
         chdir(s_filesDir.c_str());
+        /* the Linux preferences code keeps saves/config in $HOME/.realtech/nogravity */
+        setenv("HOME", s_filesDir.c_str(), 1);
         __android_log_print(ANDROID_LOG_INFO, TAG, "cwd = %s", s_filesDir.c_str());
         extractAsset("NOGRAVITY.RMX", s_filesDir + "/NOGRAVITY.RMX");
     }

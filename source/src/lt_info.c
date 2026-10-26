@@ -348,6 +348,11 @@ void NG_ReadGameConfig(void)
         g_SGSettings.OS = RLX.System.Id;        
         NG_SaveGameInfo();
     }
+#ifdef NG_QUEST
+    g_SGSettings.ResolutionX = 1024;
+    g_SGSettings.ResolutionY = 768;
+    g_SGSettings.ColorDepth = 32;
+#endif
     return;
 }
 

@@ -87,6 +87,8 @@ void NGL_Finish(void);
 /* VR hooks: the engine projects on the CPU into a W x H "screen"; the VR layer renders
  * that screen into its own FBO (bound whenever the engine would draw to framebuffer 0). */
 void NGL_SetTargetFramebuffer(GLuint fbo, int w, int h);
+void NGL_BindTexture(GLenum target, GLuint tex);
+const GLubyte *NGL_GetString(GLenum name);
 #ifdef __cplusplus
 }
 #endif
@@ -125,3 +127,5 @@ void NGL_SetTargetFramebuffer(GLuint fbo, int w, int h);
 #define glViewport(x, y, w, h)  NGL_Viewport(x, y, w, h)
 #define glClear(m)              NGL_Clear(m)
 #define glFinish()              NGL_Finish()
+#define glBindTexture(t, x)     NGL_BindTexture(t, x)
+#define glGetString(n)          NGL_GetString(n)
