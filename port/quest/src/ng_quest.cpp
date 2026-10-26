@@ -198,11 +198,13 @@ XrView s_views[2] = {{XR_TYPE_VIEW}, {XR_TYPE_VIEW}};
 float s_eyeTan = 1.2f;
 bool s_stereoFrame = false, s_stereoRender = false, s_eyesValid = false;
 uint32_t s_eyeIdx[2] = {0, 0};
-float s_hudTanX = 0.8f, s_hudTanY = 0.6f;
+float s_hudL = -0.8f, s_hudR = 0.8f, s_hudU = 0.6f, s_hudD = -0.6f;
 const float kHudDist = 3.0f;
 int s_frameKind = 0, s_lastKind = -1; /* 1 flat, 2 stereo (logged on change) */
 XrEnvironmentBlendMode s_blend = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
-bool s_recenterPending = true, s_recenterDone = false;
+bool s_recenterPending = true, s_recenterDone = false, s_recenterPosOnly = false;
+float s_recenterYaw = 0.f;
+uint32_t s_recenterAt = 0; /* delayed recentre (SDL ticks), 0 = none */
 uint64_t s_frameNo = 0;
 JavaVM *s_vm = nullptr;
 jobject s_activity = nullptr;
@@ -386,6 +388,13 @@ void updateInput() {
 
     const uint32_t now = SDL_GetTicks();
     const bool flying = (now - s_lastFlightTick) < 250;
+    static bool wasFlying = false;
+    if (flying && !wasFlying && !s_recenterPending) {
+        /* new flight: put the eyes back on the ship's gun line (head height drifts while in the menus) */
+        s_recenterPending = true;
+        s_recenterPosOnly = true;
+    }
+    wasFlying = flying;
     static uint32_t lastT = 0;
     float dt = lastT ? (now - lastT) / 1000.f : 0.f;
     if (dt > 0.1f) dt = 0.1f;
@@ -452,13 +461,18 @@ void pollEvents() {
             auto *c = (XrEventDataSessionStateChanged *)&ev;
             s_state = c->state;
             XRLOG("session state -> %s", stateName(s_state));
-            if (s_state == XR_SESSION_STATE_FOCUSED && !s_recenterDone) s_recenterPending = true;
+            if (s_state == XR_SESSION_STATE_FOCUSED) {
+                /* first start: now; headset put back on: after it has settled on the head */
+                if (!s_recenterDone) s_recenterPending = true;
+                else s_recenterAt = SDL_GetTicks() + 1500;
+            }
             if (s_state == XR_SESSION_STATE_EXITING || s_state == XR_SESSION_STATE_LOSS_PENDING) s_lost = true;
         } else if (ev.type == XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING) {
             s_lost = true;
         } else if (ev.type == XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING) {
             auto *rc = (XrEventDataReferenceSpaceChangePending *)&ev;
-            if (rc->referenceSpaceType == XR_REFERENCE_SPACE_TYPE_LOCAL && s_recenterDone) s_recenterPending = true;
+            /* system recentre / wake: fires while the headset is still being put on -> wait */
+            if (rc->referenceSpaceType == XR_REFERENCE_SPACE_TYPE_LOCAL && s_recenterDone) s_recenterAt = SDL_GetTicks() + 1500;
         }
     }
     if (!s_running && s_state == XR_SESSION_STATE_READY) {
@@ -487,6 +501,7 @@ void pollEvents() {
 }
 
 void tryRecenter() {
+    if (s_recenterAt && (int32_t)(SDL_GetTicks() - s_recenterAt) >= 0) { s_recenterAt = 0; s_recenterPending = true; s_recenterPosOnly = false; }
     if (!s_recenterPending || !s_viewSpace) return;
     XrSpaceLocation loc{XR_TYPE_SPACE_LOCATION};
     if (XR_FAILED(xrLocateSpace(s_viewSpace, s_baseSpace, s_frame.predictedDisplayTime, &loc))) return;
@@ -495,7 +510,7 @@ void tryRecenter() {
     const XrQuaternionf q = loc.pose.orientation;
     const float fx = -(2.f * (q.x * q.z + q.w * q.y));
     const float fz = -(1.f - 2.f * (q.x * q.x + q.y * q.y));
-    const float yaw = atan2f(-fx, -fz);
+    const float yaw = s_recenterPosOnly ? s_recenterYaw : atan2f(-fx, -fz);
     XrReferenceSpaceCreateInfo rs{XR_TYPE_REFERENCE_SPACE_CREATE_INFO};
     rs.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_LOCAL;
     rs.poseInReferenceSpace.position = loc.pose.position;
@@ -506,7 +521,10 @@ void tryRecenter() {
     s_pendingSpace = ns;
     s_recenterPending = false;
     s_recenterDone = true;
-    XRLOG("recentred (yaw %.1f deg)", yaw * 57.2958f);
+    XRLOG("recentred %s(yaw %.1f deg, head at %.2f %.2f %.2f m)", s_recenterPosOnly ? "position only " : "", yaw * 57.2958f,
+          loc.pose.position.x, loc.pose.position.y, loc.pose.position.z);
+    s_recenterYaw = yaw;
+    s_recenterPosOnly = false;
 }
 
 void checkRecenterMarker() {
@@ -723,8 +741,8 @@ void endXrFrame(bool stereo) {
             if (stereo && s_eyesValid) {
                 /* HUD: transparent layer at the game's own field of view, centred on the ship's nose */
                 quad.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
-                quad.pose.position = {0.f, 0.f, -kHudDist};
-                quad.size = {2.f * kHudDist * s_hudTanX, 2.f * kHudDist * s_hudTanY};
+                quad.pose.position = {kHudDist * (s_hudL + s_hudR) * 0.5f, kHudDist * (s_hudU + s_hudD) * 0.5f, -kHudDist};
+                quad.size = {kHudDist * (s_hudR - s_hudL), kHudDist * (s_hudU - s_hudD)};
             } else {
                 quad.pose.position = {0.f, kPanelY, -kPanelDist};
                 quad.size = {kPanelWidth, kPanelWidth * (float)s_h / (float)s_w};
@@ -741,7 +759,7 @@ void endXrFrame(bool stereo) {
     if (XR_FAILED(r)) check(r, "xrEndFrame");
     s_frameKind = stereo ? 2 : 1;
     if (s_frameKind != s_lastKind) {
-        XRLOG("now %s (eye %dx%d tan %.3f, HUD tan %.3f x %.3f)", stereo ? "STEREO flight" : "flat screen", s_eyeSize, s_eyeSize, s_eyeTan, s_hudTanX, s_hudTanY);
+        XRLOG("now %s (eye %dx%d tan %.3f, HUD tan L %.3f R %.3f U %.3f D %.3f)", stereo ? "STEREO flight" : "flat screen", s_eyeSize, s_eyeSize, s_eyeTan, s_hudL, s_hudR, s_hudU, s_hudD);
         s_lastKind = s_frameKind;
     }
     if (s_frameNo % 720 == 1) XRLOG("frame %llu layers %u state %s", (unsigned long long)s_frameNo, ei.layerCount, stateName(s_state));
@@ -798,6 +816,8 @@ extern "C" int NGQ_StereoEyeBegin(int eye, float q[4], float p[3], float *tanHal
     p[0] = ps.position.x; p[1] = ps.position.y; p[2] = ps.position.z;
     *tanHalf = s_eyeTan;
     *w = *h = s_eyeSize;
+    if (eye == 0 && s_frameNo % 720 == 3)
+        XRLOG("head offset (left eye) %.3f %.3f %.3f m from the recentre point", p[0], p[1], p[2]);
     return 1;
 }
 
@@ -808,9 +828,8 @@ extern "C" void NGQ_StereoEyeEnd(int eye) {
     if (eye == 1) s_eyesValid = true;
 }
 
-extern "C" void NGQ_StereoHudBegin(float tanX, float tanY) {
-    if (tanX > 0.1f && tanX < 5.f) s_hudTanX = tanX;
-    if (tanY > 0.1f && tanY < 5.f) s_hudTanY = tanY;
+extern "C" void NGQ_StereoHudBegin(float tl, float tr, float tu, float td) {
+    if (tr - tl > 0.2f && tr - tl < 10.f && tu - td > 0.2f && tu - td < 10.f) { s_hudL = tl; s_hudR = tr; s_hudU = tu; s_hudD = td; }
     bindPanel();
     glDisable(GL_SCISSOR_TEST);
     glClearColor(0, 0, 0, 0);

@@ -94,7 +94,7 @@ static float UnitsPerMeter(void)
         s_unitsPerMeter = e ? (float)atof(e) : (r > 0.f ? r / 6.f : 1.f);
         if (s_unitsPerMeter <= 0.f)
             s_unitsPerMeter = 1.f;
-        printf("[VR] ship radius %.2f units -> %.3f units per metre\n", r, s_unitsPerMeter);
+        printf("[VR] ship radius %.2f units -> %.3f units per metre\n", r, s_unitsPerMeter); fflush(stdout);
     }
     return s_unitsPerMeter;
 }
@@ -195,12 +195,26 @@ int NGVR_RenderStereo(V3XSCENE *Scene)
     }
     ProjectEffects();
 
-    /* HUD layer: same angular size as the flat game view */
+    /* HUD layer: the panel (whole game frame, s_w x s_h pixels) is placed so that each pixel
+       sits in the direction the flat game projects it to: pixel (px,py) <-> view direction
+       ((px - cx) / (|F| * Ratio), (cy - py) / |F|). The 3D viewport (GX.View) can be smaller than
+       the frame and its centre (= the ship's nose, where the crosshair is drawn) need not be the
+       frame centre, so the quad is offset accordingly. */
     {
         float fy = fabsf(vp.Focal), rx = vp.Ratio > 0.f ? vp.Ratio : 1.f;
-        float tanY = fy > 0.f ? ((float)(view.ymax - view.ymin + 1) * 0.5f) / fy : 0.6f;
-        float tanX = fy > 0.f ? ((float)(view.xmax - view.xmin + 1) * 0.5f) / (fy * rx) : 0.8f;
-        NGQ_StereoHudBegin(tanX, tanY);
+        float W = (float)GX.View.lWidth, H = (float)GX.View.lHeight;
+        static int s_logged;
+        if (fy > 1.f)
+        {
+            float tl = (0.f - vp.center.x) / (fy * rx), tr = (W - vp.center.x) / (fy * rx);
+            float tu = (vp.center.y - 0.f) / fy, td = (vp.center.y - H) / fy;
+            if (s_logged++ % 600 == 0)
+                printf("[VR] view %d,%d-%d,%d frame %dx%d centre %.1f,%.1f focal %.1f ratio %.3f -> HUD tan L %.3f R %.3f U %.3f D %.3f\n",
+                       view.xmin, view.ymin, view.xmax, view.ymax, (int)W, (int)H, vp.center.x, vp.center.y, vp.Focal, vp.Ratio, tl, tr, tu, td), fflush(stdout);
+            NGQ_StereoHudBegin(tl, tr, tu, td);
+        }
+        else
+            NGQ_StereoHudBegin(-0.8f, 0.8f, 0.6f, -0.6f);
     }
     return 1;
 }

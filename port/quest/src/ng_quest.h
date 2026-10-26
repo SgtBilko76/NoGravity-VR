@@ -20,7 +20,7 @@ void NGQ_Present(void);
 int NGQ_StereoBegin(void);
 int NGQ_StereoEyeBegin(int eye, float q[4], float p[3], float *tanHalf, int *w, int *h);
 void NGQ_StereoEyeEnd(int eye);
-void NGQ_StereoHudBegin(float tanX, float tanY);
+void NGQ_StereoHudBegin(float tanLeft, float tanRight, float tanUp, float tanDown);
 /* on-screen keyboard open: controllers stop sending menu keys */
 void NGQ_SetTextInput(int on);
 #ifdef __cplusplus

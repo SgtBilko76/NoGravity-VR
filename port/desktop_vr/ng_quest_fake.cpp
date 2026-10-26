@@ -68,7 +68,8 @@ int NGQ_StereoEyeBegin(int eye, float q[4], float p[3], float *tanHalf, int *w, 
     const float cy = cosf(yaw * .5f), sy = sinf(yaw * .5f), cp = cosf(pitch * .5f), sp = sinf(pitch * .5f);
     q[0] = cy * sp; q[1] = sy * cp; q[2] = -sy * sp; q[3] = cy * cp;
     const float off = eye == 0 ? -0.032f : 0.032f;
-    p[0] = off * cosf(yaw); p[1] = 0.f; p[2] = -off * sinf(yaw);
+    const float hy = getenv("NGQ_FAKE_HEAD_Y") ? (float)atof(getenv("NGQ_FAKE_HEAD_Y")) : 0.f;
+    p[0] = off * cosf(yaw); p[1] = hy; p[2] = -off * sinf(yaw);
     *tanHalf = kTan;
     *w = *h = s_eye;
     NGL_SetTargetFramebuffer(s_eyeFbo[eye], s_eye, s_eye);
@@ -83,8 +84,8 @@ void NGQ_StereoEyeEnd(int eye) {
     if (eye == 1) s_eyesDone = true;
 }
 
-void NGQ_StereoHudBegin(float tanX, float tanY) {
-    s_hudX = tanX; s_hudY = tanY;
+void NGQ_StereoHudBegin(float tl, float tr, float tu, float td) {
+    s_hudX = tr - tl; s_hudY = tu - td;
     bindPanel();
     glClearColor(0, 0, 0, 0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
