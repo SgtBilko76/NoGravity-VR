@@ -89,6 +89,24 @@ static void NG_UpdateCamera(void)
     V3XVECTOR b, vTgt, vPos, vDV;
     V3XOVI *mySHIP =  g_pPlayer->J.OVI;
     V3XSCALAR sp = 2;
+#ifdef NG_QUEST
+    {
+        static int lastMode = -1;
+        int m = g_SGGame.CameraMode;
+        if ((m == CAMERA_START) && (g_SGGame.Count == 2))
+            NG_AudioKickSound(g_cFXTable.Engine, g_cFXTable.SoundEngine, 0);
+        static int keep = -1;
+        if (keep < 0) keep = getenv("NGQ_KEEP_CAMERA") != NULL;
+        if (!keep && (((m >= 1) && (m <= CAMERA_SHIP)) || (m == CAMERA_NAV) || (m == CAMERA_START) || (m == CAMERA_MISSILE)))
+            g_SGGame.CameraMode = 0;
+        if (g_SGGame.CameraMode != lastMode)
+        {
+            printf("[CAM] t=%u camera mode %d -> %d\n", (unsigned)timer_ms(), m, g_SGGame.CameraMode);
+            fflush(stdout);
+            lastMode = g_SGGame.CameraMode;
+        }
+    }
+#endif
     
 	if (g_SGObjects.NavCam)  
 		mySHIP->state|=V3XSTATE_MATRIXUPDATE;
@@ -2926,6 +2944,31 @@ static void NG_UpdateAlarmAndLock(void)
 void NG_GamePlay(void)
 {
     NG_ResetKey();
+#ifdef NG_QUEST
+    {
+        int wi;
+        SGWeapon *Wd = g_SGGame.pWea;
+        for (wi = 0; wi < g_SGGame.numWeapons; wi++, Wd++)
+        {
+            V3XMESH *m = Wd->OVI ? Wd->OVI->mesh : NULL;
+            V3XVECTOR lo, hi;
+            unsigned v;
+            if (!m || !m->vertex)
+                continue;
+            lo.x = lo.y = lo.z = 1e30f; hi.x = hi.y = hi.z = -1e30f;
+            for (v = 0; v < m->numVerts; v++)
+            {
+                V3XVECTOR *p = m->vertex + v;
+                if (p->x < lo.x) lo.x = p->x; if (p->y < lo.y) lo.y = p->y; if (p->z < lo.z) lo.z = p->z;
+                if (p->x > hi.x) hi.x = p->x; if (p->y > hi.y) hi.y = p->y; if (p->z > hi.z) hi.z = p->z;
+            }
+            printf("[WEA] #%d code %d verts %u bbox x %.1f..%.1f y %.1f..%.1f z %.1f..%.1f scale %.2f ori '%s'\n", wi, Wd->pInf.Code,
+                   m->numVerts, lo.x, hi.x, lo.y, hi.y, lo.z, hi.z, m->scale, Wd->OVI->ORI ? Wd->OVI->ORI->name : "?");
+        }
+        printf("[WEA] player ShootAxe %d ship radius %.1f\n", g_pPlayer->J.pInf.ShootAxe & 127, g_pPlayer->J.OVI->ORI->global_rayon);
+        fflush(stdout);
+    }
+#endif
 
     V3XScene_Viewport_Build(g_SGGame.Scene, &GX.View);
 
