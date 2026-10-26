@@ -401,4 +401,21 @@ edit("src/lt_game.c", "void NG_GamePlay(void)\n{\n    NG_ResetKey();\n",
 #endif
 """)
 
+# 64-bit: V3XNODE/V3XDUMMY are the generic "mesh-shaped" view of every scene object (dummies are
+# even read from disk as V3XMESH). Their 24-byte pad stood for V3XMESH's 6 leading pointers, which
+# are 48 bytes on LP64 -> node->matrix/node->Tk pointed into the middle of the mesh. Shots are
+# spawned through OVI->Tk (= &node->Tk) but drawn from mesh->Tk: they appeared ~30000 units away.
+edit("rlx32/include/v3xscene.h", "typedef struct _v3x_dummy{\n u_int32_t pad[6];\n V3XMATRIX matrix;\n V3XKEY Tk;\n u_int32_t pad0[3];\n}V3XDUMMY;",
+     "typedef struct _v3x_dummy{\n void *pad[6]; /* NG 64-bit: was u_int32_t pad[6] (= V3XMESH's 6 pointers) */\n V3XMATRIX matrix;\n V3XKEY Tk;\n u_int32_t pad0[3];\n}V3XDUMMY;")
+edit("rlx32/include/v3xscene.h", "typedef struct _v3x_node{\n u_int32_t pad[6];\n V3XMATRIX matrix;\n V3XKEY Tk;\n u_int32_t pad0[3+4];\n}V3XNODE;",
+     "typedef struct _v3x_node{\n void *pad[6]; /* NG 64-bit: was u_int32_t pad[6] (= V3XMESH's 6 pointers) */\n V3XMATRIX matrix;\n V3XKEY Tk;\n u_int32_t pad0[3+4 + (sizeof(void*) == 8 ? 8 : 0)]; /* 64-bit: sizeof >= V3XMESH/V3XLIGHT, as on 32-bit */\n}V3XNODE;")
+# object copies: copy the real size of the source type (lights/cameras are not node-shaped)
+edit("rlx32/src/v3xscen2.c", "*nORI->node = *cORI->node;", "memcpy(nORI->node, cORI->node, V3XNODE_SIZEOF(cORI->type));")
+edit("rlx32/src/v3xscen2.c", "*OVI->node = *ORI->node;", "memcpy(OVI->node, ORI->node, V3XNODE_SIZEOF(ORI->type));")
+edit("rlx32/src/v3xscen2.c", "*OVI->node =* ORI->node;", "memcpy(OVI->node, ORI->node, V3XNODE_SIZEOF(ORI->type)); /* VMX loader */")
+# key pointer: lights and cameras keep their Tk elsewhere than the mesh-shaped node
+edit("rlx32/src/v3xscen2.c", "            if (OVI->node) OVI->Tk = &OVI->node->Tk;",
+     "            if (OVI->node) OVI->Tk = (ORI->type == V3XOBJ_LIGHT) ? &OVI->light->Tk : (ORI->type == V3XOBJ_CAMERA) ? &OVI->camera->Tk : &OVI->node->Tk;")
+edit("rlx32/include/v3xscene.h", "}V3XNODE;\n", "}V3XNODE;\n#define V3XNODE_SIZEOF(type) ((type) == V3XOBJ_LIGHT ? sizeof(V3XLIGHT) : (type) == V3XOBJ_CAMERA ? sizeof(V3XCAMERA) : sizeof(V3XMESH))\n")
+
 print("changed:", sorted(set(changed)) or "nothing (already applied)")

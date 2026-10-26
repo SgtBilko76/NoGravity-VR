@@ -82,9 +82,15 @@ static const NG_FIELD32 ng_f32_V3XMATERIAL[] = {
 };
 static const NG_LAYOUT32 ng_l32_V3XMATERIAL = {"V3XMATERIAL", 128, 168, 13, ng_f32_V3XMATERIAL};
 static const NG_FIELD32 ng_f32_V3XNODE[] = {
-  {0,0,144,144,0},
+  {0,0,4,8,1},
+  {4,8,4,8,1},
+  {8,16,4,8,1},
+  {12,24,4,8,1},
+  {16,32,4,8,1},
+  {20,40,4,8,1},
+  {24,48,120,120,0},
 };
-static const NG_LAYOUT32 ng_l32_V3XNODE = {"V3XNODE", 144, 144, 1, ng_f32_V3XNODE};
+static const NG_LAYOUT32 ng_l32_V3XNODE = {"V3XNODE", 144, 200, 7, ng_f32_V3XNODE};
 static const NG_FIELD32 ng_f32_V3XCL[] = {
   {0,0,8,8,0},
   {8,8,4,8,1},

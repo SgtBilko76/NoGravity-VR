@@ -50,6 +50,14 @@
 
 void V3XScene_Viewport_BuildEye(V3XSCENE *Scene);
 
+/* 64-bit layout guards: the engine accesses every scene object through the mesh-shaped V3XNODE */
+#include <stddef.h>
+_Static_assert(offsetof(V3XNODE, matrix) == offsetof(V3XMESH, matrix), "V3XNODE.matrix != V3XMESH.matrix");
+_Static_assert(offsetof(V3XNODE, Tk) == offsetof(V3XMESH, Tk), "V3XNODE.Tk != V3XMESH.Tk");
+_Static_assert(offsetof(V3XDUMMY, matrix) == offsetof(V3XMESH, matrix), "V3XDUMMY.matrix != V3XMESH.matrix");
+_Static_assert(offsetof(V3XDUMMY, Tk) == offsetof(V3XMESH, Tk), "V3XDUMMY.Tk != V3XMESH.Tk");
+_Static_assert(sizeof(V3XNODE) >= sizeof(V3XMESH) && sizeof(V3XNODE) >= sizeof(V3XLIGHT), "V3XNODE too small");
+
 int g_ngqEye = -1;
 
 static u_int32_t *s_savedState;
@@ -168,6 +176,44 @@ int NGVR_RenderStereo(V3XSCENE *Scene)
         V3X.ViewPort.Ratio = 1.f;
 
         g_ngqEye = eye;
+        /* aim debug: player's live shots relative to the ship and in this eye's image */
+        if (eye == 0)
+        {
+            static u_int32_t lastLog;
+            u_int32_t tnow = timer_ms();
+            if (tnow - lastLog > 700)
+            {
+                SGWeapon *W = g_SGGame.pWea;
+                int wi, n = 0;
+                for (wi = 0; wi < g_SGGame.numWeapons && n < 2; wi++, W++)
+                {
+                    V3XVECTOR wp, d, sv, pr;
+                    float r, u, f;
+                    if (!W->Available || W->Attacker != &g_pPlayer->J || !W->OVI || !W->OVI->mesh)
+                        continue;
+                    wp = W->OVI->mesh->matrix.v.Pos;
+                    d.x = wp.x - pos[0]; d.y = wp.y - pos[1]; d.z = wp.z - pos[2];
+                    r = Mc[0] * d.x + Mc[1] * d.y + Mc[2] * d.z;
+                    u = Mc[3] * d.x + Mc[4] * d.y + Mc[5] * d.z;
+                    f = -(Mc[6] * d.x + Mc[7] * d.y + Mc[8] * d.z);
+                    d.x = wp.x - V3X.Camera.M.v.Pos.x; d.y = wp.y - V3X.Camera.M.v.Pos.y; d.z = wp.z - V3X.Camera.M.v.Pos.z;
+                    sv.x = M[0] * d.x + M[1] * d.y + M[2] * d.z;
+                    sv.y = M[3] * d.x + M[4] * d.y + M[5] * d.z;
+                    sv.z = M[6] * d.x + M[7] * d.y + M[8] * d.z;
+                    pr.x = sv.z < 0 ? (float)(w / 2) + sv.x * ((-(float)h * 0.5f / tanHalf) / sv.z) : -1;
+                    pr.y = sv.z < 0 ? (float)(h / 2) - sv.y * ((-(float)h * 0.5f / tanHalf) / sv.z) : -1;
+                    printf("[SHOT] code %d: ship frame right %.0f up %.0f fwd %.0f | eye px %.0f,%.0f of %dx%d | Tk pos d %.0f | head p %.3f %.3f %.3f q %.3f %.3f %.3f %.3f\n",
+                           W->pInf.Code, r, u, f, pr.x, pr.y, w, h,
+                           V3XVector_Distance(&W->OVI->Tk->vinfo.pos, &wp), p[0], p[1], p[2], q[0], q[1], q[2], q[3]);
+                    n++;
+                }
+                if (n)
+                {
+                    fflush(stdout);
+                    lastLog = tnow;
+                }
+            }
+        }
         V3XScene_Viewport_BuildEye(Scene);
         V3XScene_Viewport_Clear(Scene);
         V3XScene_Viewport_Render(Scene);

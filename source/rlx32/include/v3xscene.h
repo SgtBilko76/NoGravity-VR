@@ -111,7 +111,7 @@ typedef struct _v3x_morph{
 
 
 typedef struct _v3x_dummy{
- u_int32_t pad[6];
+ void *pad[6]; /* NG 64-bit: was u_int32_t pad[6] (= V3XMESH's 6 pointers) */
  V3XMATRIX matrix;
  V3XKEY Tk;
  u_int32_t pad0[3];
@@ -119,11 +119,12 @@ typedef struct _v3x_dummy{
 
 
 typedef struct _v3x_node{
- u_int32_t pad[6];
+ void *pad[6]; /* NG 64-bit: was u_int32_t pad[6] (= V3XMESH's 6 pointers) */
  V3XMATRIX matrix;
  V3XKEY Tk;
- u_int32_t pad0[3+4];
+ u_int32_t pad0[3+4 + (sizeof(void*) == 8 ? 8 : 0)]; /* 64-bit: sizeof >= V3XMESH/V3XLIGHT, as on 32-bit */
 }V3XNODE;
+#define V3XNODE_SIZEOF(type) ((type) == V3XOBJ_LIGHT ? sizeof(V3XLIGHT) : (type) == V3XOBJ_CAMERA ? sizeof(V3XCAMERA) : sizeof(V3XMESH))
 
 
 typedef struct _v3x_ori{

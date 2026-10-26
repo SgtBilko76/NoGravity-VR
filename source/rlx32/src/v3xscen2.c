@@ -413,7 +413,7 @@ void RLXAPI V3XScene_CRC_Check(V3XSCENE* pScene)
 		            }
 					else
 					{
-	                    *nORI->node = *cORI->node;
+	                    memcpy(nORI->node, cORI->node, V3XNODE_SIZEOF(cORI->type));
 						nORI->flags|=V3XORI_DUPLICATED;						
 					}
 				}
@@ -839,7 +839,7 @@ V3XSCENE *V3XScene_New(int option)
                 ORI->light->type = V3XLIGHTTYPE_DIRECTIONAL;
                 ORI->light->intensity = 255.f;
                 RGB_Set(ORI->light->color, 180, 180, 180);
-                *OVI->node = *ORI->node;
+                memcpy(OVI->node, ORI->node, V3XNODE_SIZEOF(ORI->type));
                 OVI->TVI = V3XScene_NewTVI(pScene);
                 OVI->TVI->TRI = V3XScene_NewTRI(pScene);
             }
@@ -1705,7 +1705,7 @@ int RLXAPI V3XScene_Verify(V3XSCENE *pScene)
         ORI = OVI->ORI;
         if (ORI->type!=V3XOBJ_NONE)
         {
-            if (OVI->node) OVI->Tk = &OVI->node->Tk;
+            if (OVI->node) OVI->Tk = (ORI->type == V3XOBJ_LIGHT) ? &OVI->light->Tk : (ORI->type == V3XOBJ_CAMERA) ? &OVI->camera->Tk : &OVI->node->Tk;
             else 
             {
                 if (ORI->type==V3XOBJ_CAMERA) OVI->Tk = &V3X.Camera.Tk;     
@@ -1811,7 +1811,7 @@ V3XOVI RLXAPI *V3XOVI_GetFromFile(V3XSCENE *pScene, const char *filename, int do
             j++;
             V3X_FREAD1(ORI, V3XORI, in);
             v3x_VMX_unpack_ORI(ORI, in, 0);
-            *OVI->node =* ORI->node;
+            memcpy(OVI->node, ORI->node, V3XNODE_SIZEOF(ORI->type)); /* VMX loader */
             k = (flags>>8);
             if (k) OVI->parent = ovl[k-1];
             else
