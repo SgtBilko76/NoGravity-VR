@@ -25,6 +25,8 @@ The first start takes a few seconds longer (the game data is unpacked once).
 
 ## Controls
 
+![No Gravity VR controller mapping](docs/controls.webp)
+
 | Button | Menus | Flight |
 |---|---|---|
 | Left stick | Move the selection | Pitch and turn |
