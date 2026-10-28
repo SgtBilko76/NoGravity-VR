@@ -1,5 +1,7 @@
 # No Gravity VR for Meta Quest and PICO
 
+**Download, install guide, controls and pictures: [portroyale.online/nogravity.html](https://portroyale.online/nogravity.html)**
+
 **No Gravity** (realtech VR, 1997, released as open source under the GPL) as a standalone
 VR game for **Meta Quest 3** and **PICO 4 / Neo 3** (OpenXR, one APK for both). The whole game is inside the APK: no PC, no extra files.
 
